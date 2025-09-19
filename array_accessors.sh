@@ -1,4 +1,8 @@
-# Array accessor functions to hide zsh indirection complexity
+#!/.bin/zsh
+# Associative array support functions
+# Copyright 2025, Steven J. DeRose.
+# May be used under the terms of the Creative Commons Attribution-Sharealike
+# license (for which see https://creativecommons.org/licenses/by-sa/3.0).
 
 # Set a key-value pair in a named associative array
 # Usage: arg_set arrayname key value
@@ -36,6 +40,7 @@ arg_has() {
 # Get all keys from a named associative array
 # Usage: arg_keys arrayname
 # Returns: space-separated list of keys via stdout
+# TODO Quoting?
 arg_keys() {
     local arrayname="$1"
 
@@ -47,6 +52,7 @@ arg_keys() {
 # Get all values from a named associative array
 # Usage: arg_values arrayname
 # Returns: space-separated list of values via stdout
+# TODO Quoting?
 arg_values() {
     local arrayname="$1"
 
@@ -75,10 +81,14 @@ arg_init() {
     fi
 }
 
+arg_clear() {
+    local arrayname="$1"  # TODO finish
+}
+
 # Find minimum unique key matches in a named associative array
 # Usage: arg_find_key arrayname partial_key [case_insensitive]
 # Returns: 0=not found, 1=unique match, 2=multiple matches
-# Sets global _argparse_matched_key with the unique match (if any)
+# Sets global _argparse_matched_key with the unique match (if any)  TODO?
 arg_find_key() {
     local arrayname="$1" partial_key="$2" case_insensitive="${3:-0}"
     local -a matches
