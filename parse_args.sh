@@ -1,9 +1,24 @@
 #!/bin/bash
 
-# parse_args function - processes command line arguments using defined argument specs
+# parse_args function - processes command line arguments using argument defs
+
+is_type() {
+    if [[ "$1" == "-h" ]]; then
+        cat <<EOF
+is_type [name]: test if this is a known zsh_argparse type name.
+EOF
+        return
+    fi
+    local nums="INT|HEXINT|OCTINT|ANYINT|FLOAT|BOOL|PROB|LOGPROB"
+    local strs="STR|IDENT|UIDENT|CHAR|REGEX|PATH|URL"
+    lical tims="TIME|DATE|DATETIME|DURATION|EPOCH"
+    # TODO: TENSOR LANG COMPLEX ENUM
+    [[ "${parsed_args[type]}" =~ ($nums|$strs|$tims) ]] && return 0
+    return 99
+}
 
 check_re() {
-    # Test is the arg is a legit regex.
+    # Test if the arg is a legit regex.
     # If grep supports -P, use that for PCRE.
     local regex="$1"
     echo "" | grep -E "$regex" 2>/dev/null;
@@ -73,6 +88,17 @@ is_hexint() {
     fi
 }
 
+is_binint() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ! "$value" =~ ^(0b)?[01]+$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid hexadecimal integer" >&2
+        return 1
+    fi
+}
+
 is_anyint() {
     local quiet value
     if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
@@ -99,7 +125,7 @@ is_float() {
     fi
 }
 
-is_probability() {
+is_prob() {
     local quiet value
     if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
     else quiet=""; value="$1"; fi
@@ -118,6 +144,8 @@ is_bool() {
     if [[ "$1" == "-q" ]]; then quiet=1; value="$2"; abbrev_ok="$3"
     else quiet=""; value="$1"; abbrev_ok="$2"; fi
 
+    if [[ "$1" == "" ]] || "$1" == "1" ]]; return 0
+
     # Convert various boolean representations
     local lower_value="${value:l}"
     case "$lower_value" in
@@ -130,7 +158,7 @@ is_bool() {
                     true "1" yes "1" on "1"
                     false "" no "" off ""
                 )
-                arg_find_key bool_choices "$lower_value" 1
+                aa_find_key bool_choices "$lower_value" 1
                 case $? in
                     1) return 0 ;;
                 esac
@@ -153,6 +181,7 @@ is_regex() {
 }
 
 is_path() {
+    # TODO Something to say if exists, writable, exists but for last step, ...
     local quiet value
     if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
     else quiet=""; value="$1"; fi
@@ -170,7 +199,7 @@ is_url() {
     if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
     else quiet=""; value="$1"; fi
 
-    # Basic URL validation
+    # Basic URL validation (TODO buff)
     if [[ ! "$value" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.* ]]; then
         $quiet || echo "Error: '$value' is not a valid URL" >&2
         return 1
@@ -200,16 +229,16 @@ _argparse_process_option() {
     local enum_case_ignore="$5" enum_abbrevs="$6"
 
     local action type nargs choices pattern dest
-    action=$(arg_get "$refname" "action" 2>/dev/null || echo "STORE")
-    type=$(arg_get "$refname" "type" 2>/dev/null || echo "STR")
-    nargs=$(arg_get "$refname" "nargs" 2>/dev/null)
-    choices=$(arg_get "$refname" "choices" 2>/dev/null)
-    pattern=$(arg_get "$refname" "pattern" 2>/dev/null)
-    dest=$(arg_get "$refname" "dest" 2>/dev/null)
+    action=$(aa_get "$refname" "action" 2>/dev/null || echo "STORE")
+    type=$(aa_get "$refname" "type" 2>/dev/null || echo "STR")
+    nargs=$(aa_get "$refname" "nargs" 2>/dev/null)
+    choices=$(aa_get "$refname" "choices" 2>/dev/null)
+    pattern=$(aa_get "$refname" "pattern" 2>/dev/null)
+    dest=$(aa_get "$refname" "dest" 2>/dev/null)
 
     if [[ -z "$dest" ]]; then
         local names
-        names=$(arg_get "$refname" "names")
+        names=$(aa_get "$refname" "names")
         local -a name_list
         name_list=(${=names})
         dest="${name_list[1]#-#-}"
@@ -219,28 +248,28 @@ _argparse_process_option() {
 
     case "$action" in
         STORE_TRUE)
-            arg_set "$result_array" "$dest" "1"
+            aa_set "$result_array" "$dest" "1"
             return 0 ;;
         STORE_FALSE)
-            arg_set "$result_array" "$dest" ""
+            aa_set "$result_array" "$dest" ""
             return 0 ;;
         STORE_CONST)
             local const_val
-            const_val=$(arg_get "$refname" "const" 2>/dev/null)
-            arg_set "$result_array" "$dest" "$const_val"
+            const_val=$(aa_get "$refname" "const" 2>/dev/null)
+            aa_set "$result_array" "$dest" "$const_val"
             return 0 ;;
         COUNT)
             local current
-            current=$(arg_get "$result_array" "$dest" 2>/dev/null || echo "0")
-            arg_set "$result_array" "$dest" "$((current + 1))"
+            current=$(aa_get "$result_array" "$dest" 2>/dev/null || echo "0")
+            aa_set "$result_array" "$dest" "$((current + 1))"
             return 0 ;;
         TOGGLE)
             local current
-            current=$(arg_get "$result_array" "$dest" 2>/dev/null)
+            current=$(aa_get "$result_array" "$dest" 2>/dev/null)
             if [[ -n "$current" ]]; then
-                arg_set "$result_array" "$dest" ""
+                aa_set "$result_array" "$dest" ""
             else
-                arg_set "$result_array" "$dest" "1"
+                aa_set "$result_array" "$dest" "1"
             fi
             return 0 ;;
         STORE|APPEND|EXTEND)
@@ -303,18 +332,20 @@ _argparse_process_option() {
             case "$action" in
                 STORE)
                     if [[ ${#validated_values} -eq 1 ]]; then
-                        arg_set "$result_array" "$dest" "${validated_values[1]}"
+                        aa_set "$result_array" "$dest" "${validated_values[1]}"
                     else
                         # Multiple values - store as space-separated string
-                        arg_set "$result_array" "$dest" "${validated_values[*]}"
+                        aa_set "$result_array" "$dest" "${validated_values[*]}"
                     fi ;;
-                APPEND|EXTEND)
+                APPEND)
+                    echo "Warning: APPEND action not yet implemented" >&2
+                EXTEND)
                     # TODO: Implement append/extend logic
-                    echo "Warning: APPEND/EXTEND actions not yet implemented" >&2
-                    arg_set "$result_array" "$dest" "${validated_values[*]}" ;;
+                    echo "Warning: EXTEND action not yet implemented" >&2
+                    aa_set "$result_array" "$dest" "${validated_values[*]}" ;;
             esac ;;
         *)
-            echo "Error: Unknown action: $action" >&2
+            echo "Error: Unknown action '$action' for option $option_name." >&2
             return 1 ;;
     esac
 
@@ -326,7 +357,7 @@ _argparse_process_flag_option() {
     local refname="$1" option_name="$2"
 
     local action
-    action=$(arg_get "$refname" "action" 2>/dev/null || echo "STORE")
+    action=$(aa_get "$refname" "action" 2>/dev/null || echo "STORE")
 
     case "$action" in
         STORE_TRUE|STORE_FALSE|STORE_CONST|COUNT|TOGGLE)
@@ -401,7 +432,7 @@ parse_args() {
 
         # Get the names for this argument
         local names
-        names=$(arg_get "$refname" "names")
+        names=$(aa_get "$refname" "names")
         if [[ -z "$names" ]]; then
             continue
         fi
@@ -422,23 +453,23 @@ parse_args() {
     # Initialize result arrays for each refname
     for refname in "${refnames[@]}"; do
         local result_array="${refname}_results"
-        arg_init "$result_array"
+        aa_init "$result_array"
 
         # Set defaults
         local default_val
-        default_val=$(arg_get "$refname" "default" 2>/dev/null)
+        default_val=$(aa_get "$refname" "default" 2>/dev/null)
         if [[ -n "$default_val" ]]; then
             local dest
-            dest=$(arg_get "$refname" "dest" 2>/dev/null)
+            dest=$(aa_get "$refname" "dest" 2>/dev/null)
             if [[ -z "$dest" ]]; then
                 # Extract dest from first option name
                 local names
-                names=$(arg_get "$refname" "names")
+                names=$(aa_get "$refname" "names")
                 local -a name_list
                 name_list=(${=names})
                 dest="${name_list[1]#-#-}"  # Strip leading dashes
             fi
-            arg_set "$result_array" "$dest" "$default_val"
+            aa_set "$result_array" "$dest" "$default_val"
         fi
     done
 
@@ -534,17 +565,17 @@ parse_command_line() {
         fi
 
         local names
-        names=$(arg_get "$refname" "names")
+        names=$(aa_get "$refname" "names")
         if [[ -z "$names" ]]; then
             continue
         fi
 
         # Check if this argument is required
         local required
-        required=$(arg_get "$refname" "required" 2>/dev/null)
+        required=$(aa_get "$refname" "required" 2>/dev/null)
         if [[ -n "$required" ]]; then
             local dest
-            dest=$(arg_get "$refname" "dest" 2>/dev/null)
+            dest=$(aa_get "$refname" "dest" 2>/dev/null)
             if [[ -z "$dest" ]]; then
                 local -a name_list
                 name_list=(${=names})
@@ -574,22 +605,22 @@ parse_command_line() {
     # Initialize result arrays
     for refname in "${refnames[@]}"; do
         local result_array="${refname}_results"
-        arg_init "$result_array"
+        aa_init "$result_array"
 
         # Set defaults
         local default_val
-        default_val=$(arg_get "$refname" "default" 2>/dev/null)
+        default_val=$(aa_get "$refname" "default" 2>/dev/null)
         if [[ -n "$default_val" ]]; then
             local dest
-            dest=$(arg_get "$refname" "dest" 2>/dev/null)
+            dest=$(aa_get "$refname" "dest" 2>/dev/null)
             if [[ -z "$dest" ]]; then
                 local names
-                names=$(arg_get "$refname" "names")
+                names=$(aa_get "$refname" "names")
                 local -a name_list
                 name_list=(${=names})
                 dest="${name_list[1]#-#-}"
             fi
-            arg_set "$result_array" "$dest" "$default_val"
+            aa_set "$result_array" "$dest" "$default_val"
         fi
     done
 
@@ -619,7 +650,7 @@ parse_command_line() {
                     matched_refname="${long_options[$option_name]}"
                 elif [[ $option_case_ignore -eq 1 ]]; then
                     # Try case-insensitive abbreviation matching
-                    arg_find_key long_options "$option_name" 1
+                    aa_find_key long_options "$option_name" 1
                     case $? in
                         1) matched_refname="${long_options[$_argparse_matched_key]}" ;;
                         0) echo "Error: Unknown option: $option_name" >&2; return 1 ;;
@@ -637,10 +668,10 @@ parse_command_line() {
 
                 # Mark as provided for required checking
                 local dest
-                dest=$(arg_get "$matched_refname" "dest" 2>/dev/null)
+                dest=$(aa_get "$matched_refname" "dest" 2>/dev/null)
                 if [[ -z "$dest" ]]; then
                     local names
-                    names=$(arg_get "$matched_refname" "names")
+                    names=$(aa_get "$matched_refname" "names")
                     local -a name_list
                     name_list=(${=names})
                     dest="${name_list[1]#-#-}"
@@ -669,10 +700,10 @@ parse_command_line() {
                         fi
                         # Mark as provided for required checking
                         local dest
-                        dest=$(arg_get "$matched_refname" "dest" 2>/dev/null)
+                        dest=$(aa_get "$matched_refname" "dest" 2>/dev/null)
                         if [[ -z "$dest" ]]; then
                             local names
-                            names=$(arg_get "$matched_refname" "names")
+                            names=$(aa_get "$matched_refname" "names")
                             local -a name_list
                             name_list=(${=names})
                             dest="${name_list[1]#-#-}"
@@ -685,10 +716,10 @@ parse_command_line() {
                         fi
                         # Also mark flags as provided for required checking
                         local dest
-                        dest=$(arg_get "$matched_refname" "dest" 2>/dev/null)
+                        dest=$(aa_get "$matched_refname" "dest" 2>/dev/null)
                         if [[ -z "$dest" ]]; then
                             local names
-                            names=$(arg_get "$matched_refname" "names")
+                            names=$(aa_get "$matched_refname" "names")
                             local -a name_list
                             name_list=(${=names})
                             dest="${name_list[1]#-#-}"
@@ -741,7 +772,7 @@ _argparse_validate_type() {
 
         # Try abbreviation/case-insensitive matching if enabled
         if [[ "$abbrev_ok" == "1" || "$case_ignore" == "1" ]]; then
-            arg_find_key choices_map "$value" "$case_ignore"
+            aa_find_key choices_map "$value" "$case_ignore"
             local result=$?
             case $result in
                 1)
@@ -771,7 +802,7 @@ _argparse_validate_type() {
         fi
     fi
 
-    # Type-specific validation and conversion using new functions
+    # Type-specific validation and conversion using new functions TODO ????
     case "$type" in
         STR) is_str "$value" ;;
         IDENT) is_ident "$value" ;;
@@ -781,7 +812,7 @@ _argparse_validate_type() {
         OCTINT) is_octint "$value" ;;
         ANYINT) is_anyint "$value" ;;
         FLOAT) is_float "$value" ;;
-        PROBABILITY) is_probability "$value" ;;
+        PROB) is_prob "$value" ;;
         LOGPROB) is_logprob "$value" ;;
         BOOL) is_bool "$value" "$abbrev_ok" ;;
         REGEX) is_regex "$value" ;;

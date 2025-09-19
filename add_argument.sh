@@ -148,12 +148,12 @@ add_argument() {
     [[ -z "${parsed_args[action]}" ]] && parsed_args[action]="STORE"
     [[ -z "${parsed_args[fold]}" ]] && parsed_args[fold]="NONE"
 
-    # Generate default refname if not provided: _arg_ + first option name
+    # Generate default refname if not provided: _aa_ + first option name
     if [[ -z "$refname" ]]; then
         if [[ ${#option_names} -gt 0 ]]; then
             local first_name="${option_names[1]}"
             # Strip leading dashes and use as refname
-            refname="_arg_${first_name#-#-}"
+            refname="_aa_${first_name#-#-}"
         else
             echo "Error: No option names provided" >&2
             return 1
@@ -168,14 +168,10 @@ add_argument() {
 
     # TODO: Validate against bootstrap definitions (type checking, pattern matching, etc.)
     # For now, basic validation:
-    case "${parsed_args[type]}" in
-        INT|HEXINT|OCTINT|ANYINT|FLOAT|BOOL|STR|TOKEN|CHAR|REGEX|PATH|URL|TIME|DATE|DATETIME)
-            ;;
-        *)
-            echo "Error: Invalid type: ${parsed_args[type]}" >&2
-            return 1
-            ;;
-    esac
+    if ! [[ is_type "${parsed_args[type]}" ]]; then
+        echo "Error: Invalid type: ${parsed_args[type]}" >&2
+        return 1
+   fi
 
     # Check for existing definition
     if ! typeset -p _argparse_registry &>/dev/null; then
@@ -188,13 +184,13 @@ add_argument() {
     fi
 
     # Initialize the target array if it doesn't exist
-    arg_init "$refname"
+    aa_init "$refname"
 
     # Store the parsed definition
-    arg_set "$refname" "names" "${(j: :)option_names}"
+    aa_set "$refname" "names" "${(j: :)option_names}"
     for key in type action required default help choices nargs const dest fold format pattern reset; do
         if [[ -n "${pargs[$key]}" ]]; then
-            arg_set "$refname" "$key" "${pargs[$key]}"
+            aa_set "$refname" "$key" "${pargs[$key]}"
         fi
     done
 
