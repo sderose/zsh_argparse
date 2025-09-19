@@ -1,23 +1,196 @@
+#!/bin/bash
+
 # parse_args function - processes command line arguments using defined argument specs
 
 check_re() {
     # Test is the arg is a legit regex.
     # If grep supports -P, use that for PCRE.
+    local regex="$1"
     echo "" | grep -E "$regex" 2>/dev/null;
-    case $? in 0|1) return 0;; *) return 1;; esac
+    [[ $? == 0 ]] || [[ $? == 1 ]] || return 99
+    return 0
 }
 
-parse_args() {
-    local -A parse_options
-    local -a refnames
-    local option_case_ignore=1
-    local enum_case_ignore=1
-    local enum_abbrevs=1
-    local i=1
+# Type validation functions
+is_str() {
+    # String: accepts any value
+    return 0
+}
 
-    # Parse parse_args options first
-    while [[ $i -le $# ]]; do
-        local arg="${@[i]}"
+is_ident() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    # Identifier: non-empty, alphanumeric and underscore only
+    if [[ -z "$value" || ! "$value" =~ ^[a-zA-Z0-9_]+$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid identifier (must be non-empty [a-zA-Z0-9_] only)" >&2
+        return 1
+    fi
+}
+
+is_char() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ${#value} -ne 1 ]]; then
+        $quiet || echo "Error: '$value' is not a single character" >&2
+        return 1
+    fi
+}
+
+is_int() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid integer" >&2
+        return 1
+    fi
+}
+
+is_octint() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ! "$value" =~ ^(0)?[0-7]+$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid octal integer" >&2
+        return 1
+    fi
+}
+
+is_hexint() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ! "$value" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid hexadecimal integer" >&2
+        return 1
+    fi
+}
+
+is_anyint() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    # Try octal first (corrected order), then decimal, hex, binary
+    if is_octint -q "$value" || is_int -q "$value" ||
+       [[ "$value" =~ ^0x[0-9a-fA-F]+$ ]] || [[ "$value" =~ ^0b[01]+$ ]]; then
+        return 0
+    else
+        $quiet || echo "Error: '$value' is not a valid integer (decimal/hex/octal/binary)" >&2
+        return 1
+    fi
+}
+
+is_float() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ! "$value" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid float" >&2
+        return 1
+    fi
+}
+
+is_probability() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    if [[ ! "$value" =~ ^[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
+        $quiet || echo "Error: '$value' is not a valid probability" >&2
+        return 1
+    elif ! (( $(echo "$value >= 0.0 && $value <= 1.0" | bc -l) )); then
+        $quiet || echo "Error: '$value' is not a valid probability (must be between 0.0 and 1.0)" >&2
+        return 1
+    fi
+}
+
+is_bool() {
+    local quiet value abbrev_ok
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"; abbrev_ok="$3"
+    else quiet=""; value="$1"; abbrev_ok="$2"; fi
+
+    # Convert various boolean representations
+    local lower_value="${value:l}"
+    case "$lower_value" in
+        1|true|yes|on|y) return 0 ;;
+        0|false|no|off|n) return 0 ;;
+        *)
+            if [[ "$abbrev_ok" == "1" ]]; then
+                # Try abbreviation matching
+                local -A bool_choices=(
+                    true "1" yes "1" on "1"
+                    false "" no "" off ""
+                )
+                arg_find_key bool_choices "$lower_value" 1
+                case $? in
+                    1) return 0 ;;
+                esac
+            fi
+            $quiet || echo "Error: '$value' is not a valid boolean (1/0, true/false, yes/no, on/off)" >&2
+            return 1 ;;
+    esac
+}
+
+is_regex() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    # Test for a valid regex pattern (TODO: PCRE vs. grep vs. -E vs zsh)
+    if ! check_re "$value"; then
+        $quiet || echo "Error: '$value' is not a valid regular expression" >&2
+        return 1
+    fi
+}
+
+is_path() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    # Basic path validation - no null bytes, reasonable length
+    local pathExpr='/?[._-$~#a-zA-Z0-9]*(/[._-$~#a-zA-Z0-9]*)*'
+    if [[ ! "$value" =~ "$pathExpr" ]]; then
+        $quiet || echo "Error: '$value' seems not to be a valid path" >&2
+        return 1
+    fi
+}
+
+is_url() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    # Basic URL validation
+    if [[ ! "$value" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.* ]]; then
+        $quiet || echo "Error: '$value' is not a valid URL" >&2
+        return 1
+    fi
+}
+
+is_time_date() {
+    local quiet value
+    if [[ "$1" == "-q" ]]; then quiet=1; value="$2"
+    else quiet=""; value="$1"; fi
+
+    # Validate ISO8601 format using date command
+    # Try both GNU date (Linux) and BSD date (macOS) approaches
+    if ! date -d "$value" "+%s" &>/dev/null 2>&1 &&
+       ! date -j -f "%Y-%m-%dT%H:%M:%S" "$value" "+%s" &>/dev/null 2>&1 &&
+       ! date -j -f "%Y-%m-%d" "$value" "+%s" &>/dev/null 2>&1; then
+        $quiet || echo "Error: '$value' is not a valid ISO8601 date/time format" >&2
+        return 1
+    fi
+}
 
 # Helper function to process an option that takes a value
 _argparse_process_option() {
@@ -47,24 +220,20 @@ _argparse_process_option() {
     case "$action" in
         STORE_TRUE)
             arg_set "$result_array" "$dest" "1"
-            return 0
-            ;;
+            return 0 ;;
         STORE_FALSE)
             arg_set "$result_array" "$dest" ""
-            return 0
-            ;;
+            return 0 ;;
         STORE_CONST)
             local const_val
             const_val=$(arg_get "$refname" "const" 2>/dev/null)
             arg_set "$result_array" "$dest" "$const_val"
-            return 0
-            ;;
+            return 0 ;;
         COUNT)
             local current
             current=$(arg_get "$result_array" "$dest" 2>/dev/null || echo "0")
             arg_set "$result_array" "$dest" "$((current + 1))"
-            return 0
-            ;;
+            return 0 ;;
         TOGGLE)
             local current
             current=$(arg_get "$result_array" "$dest" 2>/dev/null)
@@ -73,8 +242,7 @@ _argparse_process_option() {
             else
                 arg_set "$result_array" "$dest" "1"
             fi
-            return 0
-            ;;
+            return 0 ;;
         STORE|APPEND|EXTEND)
             # These actions need argument values
             local -a values
@@ -139,19 +307,15 @@ _argparse_process_option() {
                     else
                         # Multiple values - store as space-separated string
                         arg_set "$result_array" "$dest" "${validated_values[*]}"
-                    fi
-                    ;;
+                    fi ;;
                 APPEND|EXTEND)
                     # TODO: Implement append/extend logic
                     echo "Warning: APPEND/EXTEND actions not yet implemented" >&2
-                    arg_set "$result_array" "$dest" "${validated_values[*]}"
-                    ;;
-            esac
-            ;;
+                    arg_set "$result_array" "$dest" "${validated_values[*]}" ;;
+            esac ;;
         *)
             echo "Error: Unknown action: $action" >&2
-            return 1
-            ;;
+            return 1 ;;
     esac
 
     return 0
@@ -167,48 +331,50 @@ _argparse_process_flag_option() {
     case "$action" in
         STORE_TRUE|STORE_FALSE|STORE_CONST|COUNT|TOGGLE)
             _argparse_process_option "$refname" "$option_name" "" "" 0 0
-            return $?
-            ;;
+            return $? ;;
         *)
-            echo "Error: Option $option_name in bundle cannot take arguments (action: $action)" >&2
-            return 1
-            ;;
+            echo "Error: Option $option_name in bundle cannot take arguments for action: $action" >&2
+            return 1 ;;
     esac
+}
 
+parse_args() {
+    local -A parse_options
+    local -a refnames
+    local option_case_ignore=1
+    local enum_case_ignore=1
+    local enum_abbrevs=1
+    local i=1
+
+    # Parse parse_args options first
+    while [[ $i -le $# ]]; do
+        local arg="${@[i]}"
         case "$arg" in
             --option-case-ignore)
-                option_case_ignore=1
-                ;;
+                option_case_ignore=1 ;;
             --no-option-case-ignore)
-                option_case_ignore=0
-                ;;
+                option_case_ignore=0 ;;
             --enum-case-ignore)
-                enum_case_ignore=1
-                ;;
+                enum_case_ignore=1 ;;
             --no-enum-case-ignore)
-                enum_case_ignore=0
-                ;;
+                enum_case_ignore=0 ;;
             --enum-abbrevs)
-                enum_abbrevs=1
-                ;;
+                enum_abbrevs=1 ;;
             --no-enum-abbrevs)
-                enum_abbrevs=0
-                ;;
+                enum_abbrevs=0 ;;
             --)
                 # End of parse_args options, rest are refnames
                 (( i++ ))
-                break
-                ;;
+                break ;;
             -*)
                 echo "Error: Unknown parse_args option: $arg" >&2
-                return 1
-                ;;
+                return 1 ;;
             *)
                 # Start of refnames
-                break
-                ;;
+                break ;;
         esac
         (( i++ ))
+    done
 
     # Collect refnames
     while [[ $i -le $# ]]; do
@@ -605,179 +771,23 @@ _argparse_validate_type() {
         fi
     fi
 
-    # Type-specific validation and conversion
+    # Type-specific validation and conversion using new functions
     case "$type" in
-        STR|TOKEN)
-            echo "$value"
-            return 0
-            ;;
-        CHAR)
-            if [[ ${#value} -ne 1 ]]; then
-                echo "Error: '$value' is not a single character" >&2
-                return 1
-            fi
-            echo "$value"
-            return 0
-            ;;
-        INT)
-            if [[ "$value" =~ ^-?[0-9]+$ ]]; then
-                echo "$value"
-                return 0
-            else
-                echo "Error: '$value' is not a valid integer" >&2
-                return 1
-            fi
-            ;;
-        HEXINT)
-            if [[ "$value" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
-                # Convert to decimal for storage
-                echo $(( 16#${value#0x} ))
-                return 0
-            else
-                echo "Error: '$value' is not a valid hexadecimal integer" >&2
-                return 1
-            fi
-            ;;
-        OCTINT)
-            if [[ "$value" =~ ^(0)?[0-7]+$ ]]; then
-                # Convert to decimal for storage
-                echo $(( 8#${value#0} ))
-                return 0
-            else
-                echo "Error: '$value' is not a valid octal integer" >&2
-                return 1
-            fi
-            ;;
-        ANYINT)
-            # Try decimal, hex, octal, binary
-            if [[ "$value" =~ ^-?[0-9]+$ ]]; then
-                echo "$value"
-                return 0
-            elif [[ "$value" =~ ^0x[0-9a-fA-F]+$ ]]; then
-                echo $(( $value ))
-                return 0
-            elif [[ "$value" =~ ^0[0-7]+$ ]]; then
-                echo $(( $value ))
-                return 0
-            elif [[ "$value" =~ ^0b[01]+$ ]]; then
-                echo $(( 2#${value#0b} ))
-                return 0
-            else
-                echo "Error: '$value' is not a valid integer (decimal/hex/octal/binary)" >&2
-                return 1
-            fi
-            ;;
-        FLOAT)
-            if [[ "$value" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
-                echo "$value"
-                return 0
-            else
-                echo "Error: '$value' is not a valid float" >&2
-                return 1
-            fi
-            ;;
-        PROBABILITY)
-            if [[ "$value" =~ ^[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
-                # Check if value is in [0.0, 1.0] range
-                if (( $(echo "$value >= 0.0 && $value <= 1.0" | bc -l) )); then
-                    echo "$value"
-                    return 0
-                else
-                    echo "Error: '$value' is not a valid probability (must be between 0.0 and 1.0)" >&2
-                    return 1
-                fi
-            else
-                echo "Error: '$value' is not a valid probability" >&2
-                return 1
-            fi
-            ;;
-        BOOL)
-            # Convert various boolean representations to 1 or ""
-            local lower_value="${value:l}"
-            case "$lower_value" in
-                1|true|yes|on|y)
-                    echo "1"
-                    return 0
-                    ;;
-                0|false|no|off|n)
-                    echo ""
-                    return 0
-                    ;;
-                *)
-                    if [[ "$abbrev_ok" == "1" ]]; then
-                        # Try abbreviation matching
-                        local -A bool_choices=(
-                            true "1" yes "1" on "1"
-                            false "" no "" off ""
-                        )
-                        arg_find_key bool_choices "$lower_value" 1
-                        local result=$?
-                        case $result in
-                            1)
-                                echo "${bool_choices[$_argparse_matched_key]}"
-                                return 0
-                                ;;
-                        esac
-                    fi
-                    echo "Error: '$value' is not a valid boolean (1/0, true/false, yes/no, on/off)" >&2
-                    return 1
-                    ;;
-            esac
-            ;;
-        REGEX)
-            # Test for a valid regex pattern (TODO: PCRE vs. grep vs. -E vs zsh)
-            if [[ check_re "$value" ]]; then
-                echo "$value"
-                return 0
-            else
-                echo "Error: '$value' is not a valid regular expression" >&2
-                return 1
-            fi
-            ;;
-        PATH)
-            # Basic path validation - no null bytes, reasonable length
-            pathExpr='/?[._-$~#a-zA-Z0-9]*(/[._-$~#a-zA-Z0-9]*)*'
-            if [[ "$value" =~ "$pathExpr" ]]; then
-                echo "$value"
-                return 0
-            else
-                echo "Error: '$value' seems not to be a valid path" >&2
-                return 1
-            fi
-            ;;
-        URL)
-            # Basic URL validation
-            if [[ "$value" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.* ]]; then
-                echo "$value"
-                return 0
-            else
-                echo "Error: '$value' is not a valid URL" >&2
-                return 1
-            fi
-            ;;
-        TIME|DATE|DATETIME)
-            # Validate ISO8601 format using date command
-            # Try both GNU date (Linux) and BSD date (macOS) approaches
-            if date -d "$value" "+%s" &>/dev/null 2>&1; then
-                # GNU date (Linux) - accepts ISO8601 directly
-                echo "$value"
-                return 0
-            elif date -j -f "%Y-%m-%dT%H:%M:%S" "$value" "+%s" &>/dev/null 2>&1; then
-                # BSD date (macOS) - try common ISO8601 format
-                echo "$value"
-                return 0
-            elif date -j -f "%Y-%m-%d" "$value" "+%s" &>/dev/null 2>&1; then
-                # BSD date (macOS) - try date-only format
-                echo "$value"
-                return 0
-            else
-                echo "Error: '$value' is not a valid ISO8601 date/time format" >&2
-                return 1
-            fi
-            ;;
-        *)
-            echo "Error: Unknown type '$type'" >&2
-            return 1
-            ;;
+        STR) is_str "$value" ;;
+        IDENT) is_ident "$value" ;;
+        CHAR) is_char "$value" ;;
+        INT) is_int "$value" ;;
+        HEXINT) is_hexint "$value" ;;
+        OCTINT) is_octint "$value" ;;
+        ANYINT) is_anyint "$value" ;;
+        FLOAT) is_float "$value" ;;
+        PROBABILITY) is_probability "$value" ;;
+        LOGPROB) is_logprob "$value" ;;
+        BOOL) is_bool "$value" "$abbrev_ok" ;;
+        REGEX) is_regex "$value" ;;
+        PATH) is_path "$value" ;;
+        URL) is_url "$value" ;;
+        TIME|DATE|DATETIME) is_time_date "$value" ;;
+        *) echo "Error: Unknown type '$type'" >&2; return 1 ;;
     esac
 }
