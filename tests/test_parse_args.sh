@@ -4,15 +4,18 @@
 source 'test_funcs.sh' || echo "test_funcs.sh failed, code $?"
 source 'aa_accessors.sh' || echo "aa_accessors.sh failed, code $?"
 source 'bootstrap_defs.sh' || echo "bootstrap_defs.sh failed, code $?"
-source 'add_argument.sh' || echo "add_argument.sh failed, code $?"
+source 'zerg_new.sh' || echo "zerg_new.sh failed, code $?"
+source 'zerg_add.sh' || echo "zerg_add.sh failed, code $?"
 source 'parse_args.sh' || echo "parse_args.sh failed, code $?"
 
 
 ###############################################################################
 # Test add_argument.
 
+zerg_new PARSER
+
 add_argument PARSER "--category" --type str --default None \
-    choices=sorted(unicodeCategories.keys()) \
+    choices="aardvark basilisk catoblepus dog" \
     --help "List characters in the specified 2-letter category."
 add_argument PARSER "--help-categories" --action "store_true" \
     --help "Display a list of character categories and exit."
@@ -28,7 +31,7 @@ add_argument PARSER "--quiet" \ "-q" --action "store_true" \
     --help "Suppress most messages."
 add_argument PARSER "--verbose" \ "-v" --action "count" --default 0 \
     --help "Add more messages (repeatable)."
-add_argument PARSER "--version" --action "version" version="1.2.3") \
+add_argument PARSER "--version" --action "version" version="1.2.3" \
     --help "Display version information \ then exit."
 
 add_argument PARSER "charSpecs" --type anyInt --nargs argparse.REMAINDER \

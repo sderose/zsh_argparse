@@ -1,6 +1,8 @@
 #!/bin/zsh
 # Main argument parsing functions for zsh_argparse
 
+# TODO Add function to export to python argparse, or just display.
+
 ###############################################################################
 # Helper function to validate and convert a value based on type
 # Applies case folding, checks choices/patterns, validates type
@@ -383,5 +385,183 @@ EOF
     local -a required_dests
 
     # Get registered canonical args
-    local registered=$(aa_get -q
+    local registered=$(aa_get -q "$parser_name" "__registered_args")
+    if [[ -z "$registered" ]]; then
+        tMsg 0 "zsh_parse_args: No arguments registered in parser '$parser_name'"
+        return 95
+    fi
+
+    local -a canonical_names
+    canonical_names=(${=registered})
+
+    # Build lookup tables for all aliases
+    for canonical in "${canonical_names[@]}"; do
+        local def_name="${parser_name}__${canonical}"
+
+        if ! typeset -p "$def_name" &>/dev/null; then
+            tMsg 0 "zsh_parse_args: Definition '$def_name' not found"
+            return 94
+        fi
+
+        # Get all aliases for this argument
+        local aliases=$(aa_get -q "$def_name" "aliases")
+        if [[ -z "$aliases" ]]; then
+            continue
+        fi
+
+        # Check if required
+        local required=$(aa_get -q "$def_name" "required")
+        if [[ -n "$required" ]]; then
+            local dest=$(aa_get -q "$def_name" "dest")
+            [[ -n "$dest" ]] && required_dests+=("$dest")
+        fi
+
+        local -a alias_list
+        alias_list=(${=aliases})
+
+        for alias in "${alias_list[@]}"; do
+            if [[ "$alias" =~ ^--[a-zA-Z] ]]; then
+                long_options["$alias"]="$def_name"
+            elif [[ "$alias" =~ ^-[a-zA-Z]$ ]]; then
+                short_options["$alias"]="$def_name"
+            fi
+        done
+    done
+
+    # Initialize result storage
+    if [[ "$var_style" == "assoc" ]]; then
+        local result_array="${parser_name}__results"
+        typeset -gA "$result_array"
+    fi
+
+    # Set defaults
+    for canonical in "${canonical_names[@]}"; do
+        local def_name="${parser_name}__${canonical}"
+        local default_val=$(aa_get -q "$def_name" "default")
+        local dest=$(aa_get -q "$def_name" "dest")
+
+        if [[ -n "$default_val" && -n "$dest" ]]; then
+            if [[ "$var_style" == "assoc" ]]; then
+                aa_set "${parser_name}__results" "$dest" "$default_val"
+            else
+                typeset -g "$dest"="$default_val"
+            fi
+        fi
+    done
+
+    # Parse command line arguments
+    local -a positional_args
+    local -A provided_dests
+    local i=1
+
+    while [[ $i -le ${#cmdline_args} ]]; do
+        local arg="${cmdline_args[i]}"
+
+        case "$arg" in
+            --)
+                # End of options marker
+                (( i++ ))
+                while [[ $i -le ${#cmdline_args} ]]; do
+                    positional_args+=("${cmdline_args[i]}")
+                    (( i++ ))
+                done
+                break ;;
+            --*)
+                # Long option
+                local option_name="$arg"
+                local matched_def=""
+
+                # Try exact match first
+                if [[ -n "${long_options[$option_name]}" ]]; then
+                    matched_def="${long_options[$option_name]}"
+                elif [[ $allow_abbrev -eq 1 ]]; then
+                    # Try abbreviation matching
+                    aa_find_key -x '__*' long_options "$option_name" "$option_case_ignore"
+                    case $? in
+                        1) matched_def="$_aa_matched_key" ;;
+                        0)
+                            tMsg 0 "zsh_parse_args: Unknown option: $option_name"
+                            return 91 ;;
+                        2)
+                            tMsg 0 "zsh_parse_args: Ambiguous option: $option_name"
+                            return 90 ;;
+                    esac
+                else
+                    tMsg 0 "zsh_parse_args: Unknown option: $option_name"
+                    return 91
+                fi
+
+                # Process the matched option
+                if ! _argparse_process_option "$parser_name" "$matched_def" "$option_name" cmdline_args i $enum_case_ignore $enum_abbrevs; then
+                    return 89
+                fi
+
+                # Mark as provided
+                local dest=$(aa_get -q "$matched_def" "dest")
+                [[ -n "$dest" ]] && provided_dests["$dest"]=1
+                ;;
+            -*)
+                # Short option(s)
+                local opt_string="${arg#-}"
+                local j=1
+
+                while [[ $j -le ${#opt_string} ]]; do
+                    local short_opt="-${opt_string[j]}"
+                    local matched_def=""
+
+                    # Try exact match first
+                    if [[ -n "${short_options[$short_opt]}" ]]; then
+                        matched_def="${short_options[$short_opt]}"
+                    else
+                        tMsg 0 "zsh_parse_args: Unknown option: $short_opt"
+                        return 91
+                    fi
+
+                    # Check if this is the last option in the bundle
+                    if [[ $j -eq ${#opt_string} ]]; then
+                        # Last option - can take arguments
+                        if ! _argparse_process_option "$parser_name" "$matched_def" "$short_opt" cmdline_args i $enum_case_ignore $enum_abbrevs; then
+                            return 88
+                        fi
+                    else
+                        # Middle options must be flags
+                        if ! _argparse_process_flag_option "$parser_name" "$matched_def" "$short_opt"; then
+                            return 87
+                        fi
+                    fi
+
+                    # Mark as provided
+                    local dest=$(aa_get -q "$matched_def" "dest")
+                    [[ -n "$dest" ]] && provided_dests["$dest"]=1
+
+                    (( j++ ))
+                done ;;
+            *)
+                # Positional argument
+                positional_args+=("$arg") ;;
+        esac
+
+        (( i++ ))
+    done
+
+    # Check for missing required arguments
+    for req_dest in "${required_dests[@]}"; do
+        if [[ -z "${provided_dests[$req_dest]}" ]]; then
+            tMsg 0 "zsh_parse_args: Missing required argument: $req_dest"
+            return 86
+        fi
+    done
+
+    # TODO: Handle positional arguments properly
+    if [[ ${#positional_args} -gt 0 ]]; then
+        tMsg 1 "zsh_parse_args: Positional arguments not yet supported: ${positional_args[*]}"
+    fi
+
+    return 0
 }
+
+# Detect if being run directly vs sourced
+if [[ "${(%):-%x}" == "${0}" ]]; then
+    echo "This is a library file. Source it, don't execute it."
+    echo "Usage: source parse_args.sh"
+fi

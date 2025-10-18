@@ -1,0 +1,270 @@
+==Help for add_argument.sh==
+
+(part of the zsh_argparse library)
+
+`add_argument` is pretty closely modeled on
+Python argparse [https://docs.python.org/3/library/argparse.html].
+But the syntax, set of types, and so on are changed to fit zsh.
+
+For example, here are a few typical uses:
+
+```
+    source parser_args.sh
+    ...
+    add_argument OPTS "--maxChar" --type INT --default 65535 \
+        --help "When displaying code points, skip any above this."
+    add_argument OPTS "---verbose -v" --action COUNT \
+        --help "How verbose should I be? Repeatable."
+    add_argument OPTS "--quiet --silent -q" --action STORE_TRUE \
+        --help "Suppress most messages."
+```
+
+OPTS stands for the name of a zsh associative array where you want
+the option definitions stored, somewhat like an Python argparse instance.
+
+The next item gives at least one name for the option being defined.
+In Python this could be several arguments. In zsh_argparser put all the
+synonyms in one string, separate by whitespace. The first one listed
+is the main or "reference" name.
+
+This is also the key under which the option's value is stored when an associative
+array of options is returned by parse_args, unless you say otherwise via
+--destination. Additional synonyms for the options can be added, but they
+need to go at the end, after any other of the options described next.
+
+After the reference name come options (almost entirely) corresponding
+to the keyword arguments of Python argparse.add_argument.
+
+After all the options have been defined, use parse_args on the
+command line arguments (typically `$*` or `$@` within a function),
+and the resulting values will end up in an associative array called OPTS (or an error message will
+be displayed and the script will stop):
+
+```
+    parse_args OPTS $@
+```
+
+==Options for `add_argument`==
+
+The most important options are probably `action`, `type`, `help`, and `default`.
+These and others are discussed below in alphabetical order.
+
+===add_argument --action===
+
+`--action` determines whether another token is read (from right after the option
+name on the command line), and in either case, what to store or do.
+
+Action names are upper-case with underscores. However, there is also shorthand.
+Each action name is available as its own option, but
+in lower-case and with hyphen separators instead of underscores.
+So instead of `--action STORE_TRUE` you can just say `--store-true`.
+
+The actions are mostly the same as for Python argparse. The first ones listed
+are cases where no separate value follows the option name itself:
+
+* `STORE` -- this is the default action, and simply stores the following
+token (or tokens, if `nargs` is involved).
+
+* `STORE_CONST` -- sets the option's value to that of the `--const`
+option (which should also be specified on the same add_argument call).
+
+* `STORE_TRUE` -- sets the option's value to 1.
+
+* `STORE_FALSE` -- sets the option's value to "" (zsh false).
+
+* `TOGGLE` -- for when you want
+a flag option to turn something on and also a negated version to turn it off,
+such as `--ignore-case` and `--no-ignore-case`.
+Use add_arg with the non-negated name, and `--action TOGGLE` will ensure
+that the negated options is also defined.
+Use `--default` to set the initial value. `TOGGLE` does this in one step,
+assuring that the negation prefix is consistent, that pairs share the same
+`destination` variable, `help` text, `default`, etc.
+ This is not present in Python argparse (well, not the standard one.
+ Unsurprisingly, I have a subclass...).
+
+* `COUNT` -- increments the option's value (or sets it to one if it
+does not yet exist). Typically used for *nix `-v` (verbosity) options.
+
+* `HELP` -- specifies that this is the option to request help.
+Typically used for `-h` and `--help`).
+
+* `VERSION` -- specifies that this is the option to report that command's
+version number (typically set for `--version`).
+
+The following actions are for cases where the option requires a following value
+(unlike the above):
+
+* `STORE` -- this is the default action, which just stores the value expressed by
+the token after the option name on the command line being parsed.
+Often in this case you'll also specify `--type` (see next section).
+
+* `APPEND` -- adds the following value to the end of the option's value.
+Ideally they would be an array, but in zsh, the members of an associative
+array cannot be arrays of any kind. So instead, the value will be returned
+as simply a space-separated string.
+
+TODO: It is likely this behavior will be improved by putting the string in the
+form `typeset -a` accepts for arrays so it is trivial to convert it to
+an actual zsh array by passing it to `typeset`; or possibly to use zsh's "paired"
+feature to create a parallel string and array.
+
+* `APPEND_CONST` -- like `APPEND` but adds the value of `--const` instead of
+taking the next token from the command line being parsed.
+
+* `EXTEND` -- like `APPEND` but for multiple following tokens (see `nargs`).
+I anticipate this just being the same as `APPEND`, with both handling `nargs`.
+
+
+===add_argument --type===
+
+`--type [name]` says what datatype the parsed value should be.
+These are *not* just the zsh types, but cover a much wider range.
+For example, there are types for dates and times, identifiers, urls, paths,
+and so on -- even though zsh would group all those under "scalar" (or "string").
+By distinguishing them here zsh_argparse can provide much more thorough
+value checking (again like Python argparse).
+
+There are more types provided than Python argparse provides (though you can
+add your own there, more easily than here).
+The specific argument type are described in [bootstrap_defs.md].
+
+The type names are in `\$aa_types`, which is defined in [bootstrap_defs.sh].
+Each type also has a tester named "is_" plus the type name,
+defined in [parse_args.sh] (because checking strings against the declared type
+is part of parsing command lines).
+
+Like actions, argument types can be specified as options under their own name,
+not just as values for `--type`. For example, to require an option's
+value to be an integer in any of decimal ("65"), octal ("0o101"),
+hexadecimal ("0x0041"), use either of these:
+
+```
+    --type ANYINT
+    --anyint
+```
+
+Recall that `--type` just constrains the string values given in actual
+command lines when they are parsed. It has little to do with how the values
+are stored in zsh. The values are stored unchanged, as zsh scalars/strings.
+Thus, if an ANYINT option's value was entered as "0x41", that's what's
+stored -- not the equivalent zsh integer value like `typeset -i x=65`.
+
+TODO: I may add a `--destination-type` argument to enable casting in such
+cases, but that has at least 2 problems: zsh associative arrays such as
+what parse_args creates, cannot store non-string values; and some usages
+may want to use the distinctions, such as allowing either hex or decimal values
+for a given option, but treating them somehow differently (such as
+printing some output in the same base that was used for the option).
+
+Each argument type also has a corresponding shell function that returns 0 if the
+value passed fits the datatype, or 1 if not. For example, you can say
+
+```
+    if is_int "$foo"; then...
+```
+
+When a value doesn't fit the type, a message is also printed
+unless you gave the `-q` option (spelled only that way, sorry).
+
+Do not confused this with the `sv_type` function, which returns the actual
+zsh base type of a given shell variable, as determined by `typeset`.
+"sv" in the function name is short for "shell variable",
+since of course this function is not limited to associative arrays ("aa").
+The value returned by `sv_type` is one of `undef`, `scalar`, `integer`, `float`, array, assoc -- which are zsh `typeset` types, not patterns for expressing
+other types in command lines.
+
+
+==add_argument --help==
+
+This just provides a help string describing the option. Programs can display
+it when you request help, or use it to compose rudimentary documentation, etc.
+
+
+==add_argument --default==
+
+This provides a value for the option, if the option isn't specified at all in
+a particular command line.
+
+
+==Other options to add_argu,ent==
+
+As noted, all of the actions and type values can be given as options to
+add_argument on their own, rather than as values for `--action` or `--type`.
+This is purely for convenience, and they are not listed below.
+
+[TODO Review the list below, a few are wrong or obsolete]
+
+==add_argument refname==
+
+(TODO not really an option (no "--"). A space-separated list of
+names for the option. parse_args be default ignores case, ignores internal
+underscores and hyphens, and accepts unique abbreviations. So given
+
+```
+    add_argument OPTS "--verbose -v" --action COUNT
+```
+
+All of these (and many others) would be matched (assuming there are no
+conflicting options such as `--verify`, which would rule out abbreviations
+shorter than `--veri`):
+
+    -v --ve --ver --VeR --VER --verify
+
+The first name given in the list, is considered the "reference" name,
+and is the key under which the result (or the value from `--default`)
+is store. However, you can choose a different key by using `--destination`,
+like in Python argparse.
+
+==add_argument --reset==
+
+==add_argument --flag==
+
+TODO Check?
+
+==add_argument --required (or -r)==
+
+This takes no value, and merely specifies that the given option
+must always be provided.
+
+==add_argument --choices (or -c)==
+
+This takes a string of (space-separated) tokens, from among which the option's
+value must be selected. If `--fold` (see below) is also set, matching will
+ignore case, though the value stored will be as given (not folded).
+
+==add_argument --nargs (or -n)==
+
+The number of following tokens to be consumed for the value.
+This almost always defaults, to 0 or 1 depending on `--action`.
+
+==add_argument --const (or -k)==
+
+A value to be stored when the action is `STORE_CONST` or `APPEND_CONST`.
+
+==add_argument --dest (or -v)==
+
+The name under which to store the option value. If not specified, the
+option's reference name (the first value given in `refname`, but not including
+leading hyphens) is used.
+
+==add_argument --fold==
+
+Whether to force the stored value to upper-case.
+
+TODO: Update code and doc to support this.
+
+TODO: Consider Unicode normalization and whitespace normalization, too.
+
+==add_argument --format==
+
+This lets you specify a printf-style % code which should be used to display
+the value, should the occasion arise.
+
+TODO: Finish
+
+==add_argument --pattern (or -x)==
+
+This takes a zsh-style regular expression that the option value must match.
+
+TODO: Basic, extended, or PCRE? Or choice? Or zsh setting?

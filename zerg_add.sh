@@ -18,7 +18,7 @@ add_argument() {
 
     # Verify parser exists
     if ! typeset -p "$parser_name" &>/dev/null; then
-        tMsg 0 "add_argument: Parser '$parser_name' does not exist. Use zsh_make_argparser first."
+        tMsg 0 "add_argument: Parser '$parser_name' does not exist. Use zerg_new first."
         return 98
     fi
 
