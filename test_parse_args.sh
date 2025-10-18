@@ -1,10 +1,15 @@
 #!/bin/zsh
 #
 
-source 'add_argument.sh'
-source 'array_accessors.sh'
-source 'bootstrap_defs.sh'
-source 'parse_args.sh'
+source 'test_funcs.sh' || echo "test_funcs.sh failed, code $?"
+source 'aa_accessors.sh' || echo "aa_accessors.sh failed, code $?"
+source 'bootstrap_defs.sh' || echo "bootstrap_defs.sh failed, code $?"
+source 'add_argument.sh' || echo "add_argument.sh failed, code $?"
+source 'parse_args.sh' || echo "parse_args.sh failed, code $?"
+
+
+###############################################################################
+# Test add_argument.
 
 add_argument PARSER "--category" --type str --default None \
     choices=sorted(unicodeCategories.keys()) \
@@ -30,4 +35,7 @@ add_argument PARSER "charSpecs" --type anyInt --nargs argparse.REMAINDER \
     --help "Unicode code point numbers (base 8 \ 10 \ or 16)."
 
 
-parse_args foo
+parse_args PARSER
+
+
+echo "Total fails: $FAILCT."

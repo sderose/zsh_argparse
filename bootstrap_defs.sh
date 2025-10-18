@@ -13,108 +13,133 @@
 # and defaults to the same name as the first name given.
 #
 # TODO Probably don't need an option def for the refname.
-typeset -A _bootstrap_refname=(
+# TODO Predefine stable of common attrs such as
+#     ignore-case, iencoding, oencoding, verbose, help, field-separator,
+#     version, quiet, force, recursive, dry-run/no-act/test, output, count,
+#     grep etc: expr, ignore-case, extended-regex, invert-match
+#     number, bytes, characters, fields, lines, human-readable
+#     field-sep, iformat, oformat, key
+
+
+###############################################################################
+# Enums that add_argument needs, such as types and actions.
+# These are not zsh built-in types, they are types you can declare for
+# arguments. Most will get stored as strings (after checking them).
+# Testers to see if a string matches a given type, are in
+typeset -a zap_types=(
+    INT HEXINT OCTINT ANYINT BOOL FLOAT PROB LOGPROB
+    STR CHAR TOKEN UTOKEN TOKENS UTOKENS REGEX PATH URL LANG
+    TIME DATE DATETIME DURATION EPOCH
+)
+# TODO: TENSOR COMPLEX ENUM POS/NEG/NONPOS/NONNEG?
+
+typeset -a zap_actions=(
+    STORE STORE_CONST STORE_FALSE STORE_TRUE
+    TOGGLE COUNT HELP VERSION
+    APPEND APPEND_CONST EXTEND
+)
+
+typeset -a aa_folds=(UPPER LOWER NONE)
+
+
+###############################################################################
+# What add_arg would produce for it's own args.
+#
+typeset -A _zap_names=(
     type        str
     required    ""
-    pattern     "^\w+$"
+    pattern     "^-[-\w]+( +-[-\w]+)$"
     help        "Name of associative array to store argument definition"
 )
 
-# TODO Fix order of names.
-# TODO put in "=" to be clearer
-typeset -A _bootstrap_type=(
-    names       "-t --type"
-    type        str
-    choices     "INT HEXINT OCTINT ANYINT FLOAT BOOL STR TOKEN CHAR REGEX PATH URL TIME DATE DATETIME"
-    default     STR
-    pattern     "^(INT|HEXINT|OCTINT|ANYINT|FLOAT|BOOL|STR|TOKEN|CHAR|REGEX|PATH|URL|TIME|DATE|DATETIME)$"
-    help        "Argument data type"
-)
-
-typeset -A _bootstrap_action=(
+typeset -A _zap_action=(
     names       "-a --action"
     type        str
-    choices     "STORE STORE_CONST STORE_FALSE STORE_TRUE APPEND APPEND_CONST EXTEND TOGGLE COUNT"
+    choices     "${(k)zap_actions}"
     default     STORE
-    pattern     "^(STORE|STORE_CONST|STORE_FALSE|STORE_TRUE|APPEND|APPEND_CONST|EXTEND|TOGGLE|COUNT)$"
+    pattern     "^("${(kj:|:)zap_actions}")$"
     help        "Action to take when argument is encountered"
 )
 
-typeset -A _bootstrap_required=(
-    names       "-r --required"
-    type        bool
-    action      store_true
-    help        "Argument is required"
-)
-
-typeset -A _bootstrap_default=(
-    names       "-d --default"
-    type        str
-    help        "Default value if argument not provided"
-)
-
-typeset -A _bootstrap_help=(
-    names       "-h --help"
-    type        str
-    help        "Help text for this argument"
-)
-
-typeset -A _bootstrap_choices=(
+typeset -A _zap_choices=(
     names       "-c --choices"
     type        str
     help        "Space-separated list of valid choices"
 )
 
-typeset -A _bootstrap_nargs=(
-    names       "-n --nargs"
-    type        str
-    pattern     "^(\?|\*|\+|[0-9]+)$"
-    help        "Number of arguments (?, *, +, or integer)"
-)
-
-typeset -A _bootstrap_const=(
+typeset -A _zap_const=(
     names       "-k --const"
     type        str
     help        "Constant value for store_const action"
 )
 
-typeset -A _bootstrap_dest=(
+typeset -A _zap_default=(
+    names       "-d --default"
+    type        str
+    help        "Default value if argument not provided"
+)
+
+typeset -A _zap_dest=(
     names       "-v --dest"
     type        str
     pattern     "^\w+$"
     help        "Variable name to store result (defaults to option name)"
 )
 
-typeset -A _bootstrap_fold=(
+typeset -A _zap_fold=(
     names       "--fold"
     type        str
-    choices     "UPPER LOWER NONE"
+    choices     "${(k)aa_folds}"
     default     NONE
-    pattern     "^(UPPER|LOWER|NONE)$"
-    help        "Case folding: UPPER, LOWER, or NONE"
+    pattern     "^("${(kj:|:)aa_folds}")$"
+    help        "Case folding: ${(k)aa_folds}"
 )
 
-typeset -A _bootstrap_format=(
-    names       "--format"
-    type        str
-    pattern     "^.*%.*$"
-    help        "sprintf-style format string for display"
-)
-
-typeset -A _bootstrap_pattern=(
-    names       "-x --pattern"
-    type        regex
-    help        "Regex pattern that string values must match"
-)
-
-typeset -A _bootstrap_force=(
+typeset -A _zap_force=(
     names       "--force"
     type        bool
     action      store_true
     help        "Overwrite existing argument definition"
 )
 
-typeset -A _bootstrap_names=(
+typeset -A _zap_format=(
+    names       "--format"
     type        str
-    help        "Option names (positional arguments after options)"
+    pattern     "^.*%.*$"
+    help        "sprintf-style format string for display"
+)
+
+typeset -A _zap_help=(
+    names       "-h --help"
+    type        str
+    help        "Help text for this argument"
+)
+
+typeset -A _zap_nargs=(
+    names       "-n --nargs"
+    type        str
+    pattern     "^(\?|\*|\+|[0-9]+)$"
+    help        "Number of arguments (?, *, +, or integer)"
+)
+
+typeset -A _zap_pattern=(
+    names       "-x --pattern"
+    type        regex
+    help        "Regex pattern that string values must match"
+)
+
+typeset -A _zap_required=(
+    names       "-r --required"
+    type        bool
+    action      store_true
+    help        "Argument is required"
+)
+
+typeset -A _zap_type=(
+    names       "-t --type"
+    type        str
+    choices     "${(k)zap_types}"
+    default     STR
+    pattern     "^(${(kj:|:)zap_types})$"
+    help        "Argument data type"
 )
