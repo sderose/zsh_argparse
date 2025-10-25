@@ -5,28 +5,20 @@ FAILCT=0
 v=0  # verbose
 [[ $1 == "-v" ]] && v=1
 
-tMsg() {
-    local level=$1
-    shift
-    [[ $v -lt $level ]] && return
-    print "tMsg: $*" >&2
-}
-
-tHead() {
-    print  >&2
-    print "####### $*" >&2
-}
-
-source 'aa_accessors.sh' || echo "aa_accessors.sh failed, code $?"
-source 'test_funcs.sh' ||  echo "test_funcs.sh failed, code $?"
 
 ###############################################################################
+#
+source test_funcs.sh
+tHead "Testing setup"
+source ../zerg_setup.sh
+
+
 # Test general shell variable (sv_) functions.
 
 tHead "Testing sv_type"
 if [ ${(t)x} ] || [ ${(t)NOBODY_HOME} ]; then
     tMsg 0 "x already exists...."
-    exit 99
+    return 99
 fi
 testOutput 'undef' sv_type NOBODY_HOME
 local x="foo"

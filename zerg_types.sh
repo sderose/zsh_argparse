@@ -1,76 +1,85 @@
 #!/bin/zsh
-# Type validation functions for zsh_argparse
-# Each function validates that a value conforms to a specific type.
-# All validators support a -q (quiet) flag to suppress error messages.
+# Type-related functions for zerg: a zsh port of Python argparse.
 
+if ! [ $ZERG_SETUP ]; then
+    echo "Source zerg_setup.sh first." >&2
+    return 99
+fi
 
-###############################################################################
-# Type name validation
+# Known argument types/forms (distinguishes typed forms like hexint).
+# TODO: See help re. possible additions.
+# NOTE: I tried to generate a case pattern from this dynamically, but
+# the case statement appears not to allow the variable ref. So instead, run:
+#     echo ${(k)zerg_types} | sed 's/ /|--/g'
+# and "--" to the front, and paste it into the case in zerg_add literally.
+# Likewise for actions.
 #
+typeset -A zerg_types=(
+    [int]=int [hexint]=int [octint]=int [anyint]=int
+    [bool]=bool
+    [float]=float [prob]=float [logprob]=float [complex]=complex
+    [str]=str [char]=str [ident]=str [uident]=str [idents]=str [uidents]=str
+    [regex]=str [path]=str [url]=str [lang]=str [format]=str
+    [time]=time [date]=date [datetime]=datetime
+    [duration]=timedelta [epoch]=float
+)
+
 is_type_name() {
     if [[ "$1" == "-h" ]]; then
         cat <<EOF
-Usage: is_type_name typename
-Test if this is a known zsh_argparse type name.
+Usage: is_type_name name
+Test if the argument is a known zerg datatype name, namely:
+    ${(k)zerg_types}
 Returns: 0 if valid, 1 if not
 EOF
         return
     fi
-    [[ " ${zap_types[@]} " =~ " $1 " ]] && return 0
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    [[ " ${(k)zerg_types[@]} " =~ " $1 " ]] && return 0
+    [ $quiet ] || tMsg 0 "is_type_name: '$1' is not a recognized zerg type name."
     return 1
 }
 
-# Helper to check if a regex is valid
-check_re() {
-    local regex="$1"
-    echo "" | grep -E "$regex" 2>/dev/null
-    [[ $? == 0 ]] || [[ $? == 1 ]] || return 1
-    return 0
-}
-
 # Dispatcher function - calls the appropriate is_* function for a type
-is_of_type() {
+is_of_zerg_type() {
     if [[ "$1" == "-h" ]]; then
         cat <<EOF
-Usage: is_of_type typename value
-Test if the value is of the given zap typename, namely:
-   $zap_types
+Usage: is_of_zerg_type typename value
+Test if the value matches the given zerg datatype name, one of:
+    ${(k)zerg_types}
 Returns: 0 if valid, 1 if not
 EOF
         return
     fi
-
     if ! is_type_name "$1"; then
-        tMsg 0 "is_of_type: '$1' is not a recognized zap type name."
+        tMsg 0 "is_of_zerg_type: '$1' is not a recognized zerg type name."
         return 99
     fi
-
     local testName="is_${(L)1}"
     $testName "$2"
 }
 
 
 ###############################################################################
+# Type name validation
+# Each function validates that a value conforms to a specific type.
+# All validators support a -q (quiet) flag to suppress error messages.
+
 # String type validation functions
-#
+
 is_str() {
-    # String: accepts any value
     return 0
 }
 
 is_char() {
     local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     value="$1"
-
     if [[ ${#value} -ne 1 ]]; then
         [ $quiet ] || tMSg 0 "is_char: '$value' is not a single character"
         return 1
     fi
-    return 0
 }
 
 # Identifier patterns
@@ -79,230 +88,174 @@ ident_expr="^$ident_main\$"
 idents_expr="^$ident_main( +$ident_main)*\$"
 
 is_ident() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ -z "$value" || ! "$value" =~ $ident_expr ]]; then
-        [ $quiet ] || tMSg 0 "is_ident: '$value' is not a valid identifier"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ -z "$1" || ! "$1" =~ $ident_expr ]]; then
+        [ $quiet ] || tMSg 0 "is_ident: '$1' is not a valid identifier"
         return 1
     fi
-    return 0
 }
 
 is_idents() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ -z "$value" || ! "$value" =~ $idents_expr ]]; then
-        [ $quiet ] || tMSg 0 "is_idents: '$value' is not valid space-separated identifiers"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ -z "$1" || ! "$1" =~ $idents_expr ]]; then
+        [ $quiet ] || tMSg 0 "is_idents: '$1' is not valid space-separated identifiers"
         return 1
     fi
-    return 0
+}
+
+check_re() {
+    # Is this a legit regex?
+    local regex="$1"
+    echo "" | grep -E "$regex" 2>/dev/null
+    [[ $? == 0 ]] || [[ $? == 1 ]] || return 1
 }
 
 is_regex() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if ! check_re "$value"; then
-        [ $quiet ] || tMSg 0 "is_regex: '$value' is not a valid regular expression"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if ! check_re "$1"; then
+        [ $quiet ] || tMSg 0 "is_regex: '$1' is not a valid regular expression"
         return 1
     fi
-    return 0
 }
 
 is_path() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
+    # TODO Distinguish -e -f -d -r -w -x and (!-e && -d :h && -w :h).
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     # Basic path validation - no null bytes, reasonable characters
     local pathExpr='^/?[._\-$~#a-zA-Z0-9]*(/[._\-$~#a-zA-Z0-9]*)*$'
-    if [[ ! "$value" =~ $pathExpr ]]; then
-        [ $quiet ] || tMSg 0 "is_path: '$value' does not appear to be a valid path"
+    if [[ ! "$1" =~ $pathExpr ]]; then
+        [ $quiet ] || tMSg 0 "is_path: '$1' does not appear to be a valid path"
         return 1
     fi
-    return 0
 }
 
 is_url() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    # Basic URL validation: scheme:rest
-    if [[ ! "$value" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.+ ]]; then
-        [ $quiet ] || tMSg 0 "is_url: '$value' is not a valid URL"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    # Basic url validation: scheme:rest
+    if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.+ ]]; then
+        [ $quiet ] || tMSg 0 "is_url: '$1' is not a valid url"
         return 1
     fi
-    return 0
 }
 
 is_lang() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ ! "$value" =~ ^[a-zA-Z][a-zA-Z][a-zA-Z]?(-[a-zA-Z])*; then
-        [ $quiet ] || tMSg 0 "is_url: '$value' is not a valid lang code"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z][a-zA-Z]?(-[a-zA-Z])* ]]; then
+        [ $quiet ] || tMSg 0 "is_url: '$1' is not a valid lang code"
         return 1
     fi
-    return 0
+}
+
+is_format() {
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    local expr="^%[-+0 #]*(\\*|\\d+)?(?:\\.(\\*|\\d+))?"
+    expr+="[hlLqjzt]*[diouxXeEfFgGaAcspn%]"
+    if [[ ! "$1" =~ ($expr) ]]; then
+        [ $quiet ] || tMSg 0 "is_url: '$1' is not a valid % format code"
+        return 1
+    fi
 }
 
 
-###############################################################################
-# Numeric type validation functions
-#
-is_int() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
+# Numeric type validation functions.
 
-    if [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_int: '$value' is not a valid integer"
+is_int() {
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ ^-?[0-9]+$ ]]; then
+        [ $quiet ] || tMSg 0 "is_int: '$1' is not a valid integer"
         return 1
     fi
-    return 0
 }
 
 is_octint() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ ! "$value" =~ ^(0)?[0-7]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_octint: '$value' is not a valid octal integer"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ ^(0)?[0-7]+$ ]]; then
+        [ $quiet ] || tMSg 0 "is_octint: '$1' is not a valid octal integer"
         return 1
     fi
-    return 0
 }
 
 is_hexint() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ ! "$value" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_hexint: '$value' is not a valid hexadecimal integer"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
+        [ $quiet ] || tMSg 0 "is_hexint: '$1' is not a valid hexadecimal integer"
         return 1
     fi
-    return 0
 }
 
 is_binint() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ ! "$value" =~ ^(0b)?[01]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_binint: '$value' is not a valid binary integer"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+   if [[ ! "$1" =~ ^(0b)?[01]+$ ]]; then
+        [ $quiet ] || tMSg 0 "is_binint: '$1' is not a valid binary integer"
         return 1
     fi
-    return 0
 }
 
 is_anyint() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     # Try decimal, hex, octal, binary
-    if is_int -q "$value" || is_octint -q "$value" ||
-       [[ "$value" =~ ^0x[0-9a-fA-F]+$ ]] || [[ "$value" =~ ^0b[01]+$ ]]; then
+    if is_int -q "$1" || is_octint -q "$1" ||
+       [[ "$1" =~ ^0x[0-9a-fA-F]+$ ]] || [[ "$1" =~ ^0b[01]+$ ]]; then
         return 0
     else
-        [ $quiet ] || tMSg 0 "is_anyint: '$value' is not a valid integer (decimal/hex/octal/binary)"
+        [ $quiet ] || tMSg 0 "is_anyint: '$1' is not a valid integer (decimal/hex/octal/binary)"
         return 1
     fi
 }
 
 is_float() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ ! "$value" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
-        [ $quiet ] || tMSg 0 "is_float: '$value' is not a valid float"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
+        [ $quiet ] || tMSg 0 "is_float: '$1' is not a valid float"
         return 1
     fi
-    return 0
 }
 
 is_prob() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    if [[ ! "$value" =~ ^[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
-        [ $quiet ] || tMSg 0 "is_prob: '$value' is not a valid probability"
+    local quiet="" floatexpr="[0-9]*\\.?[0-9]+([eE][+-]?[0-9]+)?"
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ (^${floatexpr}$) ]]; then
+        [ $quiet ] || tMSg 0 "is_prob: '$1' is not a valid probability"
         return 1
-    elif ! (( $(echo "$value >= 0.0 && $value <= 1.0" | bc -l) )); then
-        [ $quiet ] || tMSg 0 "is_prob: '$value' must be between 0.0 and 1.0"
+    elif ! (( $(echo "$1 >= 0.0 && $1 <= 1.0" | bc -l) )); then
+        [ $quiet ] || tMSg 0 "is_prob: '$1' must be between 0.0 and 1.0"
         return 1
     fi
-    return 0
 }
 
 is_logprob() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     # Log probability must be <= 0 (since log(p) where 0 < p <= 1)
-    if ! is_float -q "$value"; then
-        [ $quiet ] || tMSg 0 "is_logprob: '$value' is not a valid float"
+    if ! is_float -q "$1"; then
+        [ $quiet ] || tMSg 0 "is_logprob: '$1' is not a valid float"
         return 1
-    elif ! (( $(echo "$value <= 0.0" | bc -l) )); then
-        [ $quiet ] || tMSg 0 "is_logprob: '$value' must be <= 0.0"
+    elif ! (( $(echo "$1 <= 0.0" | bc -l) )); then
+        [ $quiet ] || tMSg 0 "is_logprob: '$1' must be <= 0.0"
         return 1
     fi
-    return 0
+}
+
+is_complex() {
+    local quiet="" floatexpr="[0-9]*\\.?[0-9]+([eE][+-]?[0-9]+)?"
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if [[ ! "$1" =~ (^${floatexpr}(\+${floatexpr}[ij])?$) ]]; then
+        [ $quiet ] || tMSg 0 "is_prob: '$1' is not a valid complex"
+        return 1
+    fi
 }
 
 is_bool() {
@@ -310,21 +263,18 @@ is_bool() {
     if [[ "$1" == "-h" ]]; then
         cat <<'EOF'
 Usage: is_bool [value] [alts?]
-Test whether the value is a recogized boolean value.
+Test whether the value is a recogized boolean.
 By default, only 1 for true and "" for 0.
 If alts is set, these are also accepted (ignoring case):
     1 true yes on y
     0 false no off n
+TODO Switch [alts] to be a real option.
 EOF
         return
     fi
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     value="$1"
     alts_ok="$2"
-
     if [[ -z "$value" || "$value" == "1" ]]; then
         return 0
     fi
@@ -340,93 +290,62 @@ EOF
 }
 
 
-###############################################################################
 # Time/date type validation functions
+# TODO Add US/UK/local forms? microseconds? i/f strptime?
 #
 is_time() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     # Basic time format: HH:MM or HH:MM:SS
-    if [[ ! "$value" =~ ^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$ ]]; then
-        [ $quiet ] || tMSg 0 "is_time: '$value' is not a valid time (HH:MM or HH:MM:SS)"
+    if [[ ! "$1" =~ ^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$ ]]; then
+        [ $quiet ] || tMSg 0 "is_time: '$1' is not a valid time (HH:MM or HH:MM:SS)"
         return 1
     fi
-    return 0
 }
 
 is_date() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     # Validate ISO8601 date format
-    if ! date -d "$value" "+%s" &>/dev/null 2>&1 &&
-       ! date -j -f "%Y-%m-%d" "$value" "+%s" &>/dev/null 2>&1; then
-        [ $quiet ] || tMSg 0 "is_date: '$value' is not a valid ISO8601 date"
+    if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
+       ! date -j -f "%Y-%m-%d" "$1" "+%s" &>/dev/null 2>&1; then
+        [ $quiet ] || tMSg 0 "is_date: '$1' is not a valid ISO8601 date"
         return 1
     fi
-    return 0
 }
 
 is_datetime() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
     # Validate ISO8601 datetime format
-    if ! date -d "$value" "+%s" &>/dev/null 2>&1 &&
-       ! date -j -f "%Y-%m-%dT%H:%M:%S" "$value" "+%s" &>/dev/null 2>&1; then
-        [ $quiet ] || tMSg 0 "is_datetime: '$value' is not a valid ISO8601 datetime"
+    if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
+       ! date -j -f "%Y-%m-%dT%H:%M:%S" "$1" "+%s" &>/dev/null 2>&1; then
+        [ $quiet ] || tMSg 0 "is_datetime: '$1' is not a valid ISO8601 datetime"
         return 1
     fi
-    return 0
 }
 
 is_duration() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    # Simple duration: number followed by unit (s, m, h, d)
-    if [[ ! "$value" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
-        [ $quiet ] || tMSg 0 "is_duration: '$value' is not a valid duration (e.g., 5s, 2.5h, 3d)"
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    # Simple duration: number followed by unit (s, m, h, d) TODO: beef it up.
+    if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
+        [ $quiet ] || tMSg 0 "is_duration: '$1' is not a valid duration (e.g., 5s, 2.5h, 3d)"
         return 1
     fi
-    return 0
 }
 
 is_epoch() {
-    local quiet="" value
-    if [[ "$1" == "-q" ]]; then
-        quiet=1
-        shift
-    fi
-    value="$1"
-
-    # Unix epoch time: non-negative integer (TODO or float?)
-    if [[ ! "$value" =~ ^[0-9]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_epoch: '$value' is not a valid epoch timestamp"
+    # Unix epoch time is basically float
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet=1 && shift
+    if ! is_float "$1"; then
+        [ $quiet ] || tMSg 0 "is_epoch: '$1' is not a valid epoch timestamp"
         return 1
     fi
-    return 0
 }
 
 # Warn if being run directly vs sourced
-if [[ "${(%):-%x}" == "${0}" ]]; then
-    echo "This is a library file. Source it, don't execute it."
-    echo "Usage: source type_validators.sh"
+if [[ "${ZSH_EVAL_CONTEXT}" == toplevel ]]; then
+    echo "${(%):-%x} is a library file. Source it, don't execute it."
 fi
