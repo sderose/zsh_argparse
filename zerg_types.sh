@@ -77,7 +77,7 @@ is_char() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     value="$1"
     if [[ ${#value} -ne 1 ]]; then
-        [ $quiet ] || tMSg 0 "is_char: '$value' is not a single character"
+        [ $quiet ] || tMsg 0 "is_char: '$value' is not a single character"
         return 1
     fi
 }
@@ -91,7 +91,7 @@ is_ident() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ -z "$1" || ! "$1" =~ $ident_expr ]]; then
-        [ $quiet ] || tMSg 0 "is_ident: '$1' is not a valid identifier"
+        [ $quiet ] || tMsg 0 "is_ident: '$1' is not a valid identifier"
         return 1
     fi
 }
@@ -100,7 +100,7 @@ is_idents() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ -z "$1" || ! "$1" =~ $idents_expr ]]; then
-        [ $quiet ] || tMSg 0 "is_idents: '$1' is not valid space-separated identifiers"
+        [ $quiet ] || tMsg 0 "is_idents: '$1' is not valid space-separated identifiers"
         return 1
     fi
 }
@@ -116,7 +116,7 @@ is_regex() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if ! check_re "$1"; then
-        [ $quiet ] || tMSg 0 "is_regex: '$1' is not a valid regular expression"
+        [ $quiet ] || tMsg 0 "is_regex: '$1' is not a valid regular expression"
         return 1
     fi
 }
@@ -128,7 +128,7 @@ is_path() {
     # Basic path validation - no null bytes, reasonable characters
     local pathExpr='^/?[._\-$~#a-zA-Z0-9]*(/[._\-$~#a-zA-Z0-9]*)*$'
     if [[ ! "$1" =~ $pathExpr ]]; then
-        [ $quiet ] || tMSg 0 "is_path: '$1' does not appear to be a valid path"
+        [ $quiet ] || tMsg 0 "is_path: '$1' does not appear to be a valid path"
         return 1
     fi
 }
@@ -138,7 +138,7 @@ is_url() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     # Basic url validation: scheme:rest
     if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.+ ]]; then
-        [ $quiet ] || tMSg 0 "is_url: '$1' is not a valid url"
+        [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid url"
         return 1
     fi
 }
@@ -147,7 +147,7 @@ is_lang() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z][a-zA-Z]?(-[a-zA-Z])* ]]; then
-        [ $quiet ] || tMSg 0 "is_url: '$1' is not a valid lang code"
+        [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid lang code"
         return 1
     fi
 }
@@ -158,7 +158,7 @@ is_format() {
     local expr="^%[-+0 #]*(\\*|\\d+)?(?:\\.(\\*|\\d+))?"
     expr+="[hlLqjzt]*[diouxXeEfFgGaAcspn%]"
     if [[ ! "$1" =~ ($expr) ]]; then
-        [ $quiet ] || tMSg 0 "is_url: '$1' is not a valid % format code"
+        [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid % format code"
         return 1
     fi
 }
@@ -170,7 +170,7 @@ is_int() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^-?[0-9]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_int: '$1' is not a valid integer"
+        [ $quiet ] || tMsg 0 "is_int: '$1' is not a valid integer"
         return 1
     fi
 }
@@ -179,7 +179,7 @@ is_octint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^(0)?[0-7]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_octint: '$1' is not a valid octal integer"
+        [ $quiet ] || tMsg 0 "is_octint: '$1' is not a valid octal integer"
         return 1
     fi
 }
@@ -188,7 +188,7 @@ is_hexint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_hexint: '$1' is not a valid hexadecimal integer"
+        [ $quiet ] || tMsg 0 "is_hexint: '$1' is not a valid hexadecimal integer"
         return 1
     fi
 }
@@ -197,7 +197,7 @@ is_binint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
    if [[ ! "$1" =~ ^(0b)?[01]+$ ]]; then
-        [ $quiet ] || tMSg 0 "is_binint: '$1' is not a valid binary integer"
+        [ $quiet ] || tMsg 0 "is_binint: '$1' is not a valid binary integer"
         return 1
     fi
 }
@@ -210,7 +210,7 @@ is_anyint() {
        [[ "$1" =~ ^0x[0-9a-fA-F]+$ ]] || [[ "$1" =~ ^0b[01]+$ ]]; then
         return 0
     else
-        [ $quiet ] || tMSg 0 "is_anyint: '$1' is not a valid integer (decimal/hex/octal/binary)"
+        [ $quiet ] || tMsg 0 "is_anyint: '$1' is not a valid integer (decimal/hex/octal/binary)"
         return 1
     fi
 }
@@ -219,7 +219,7 @@ is_float() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
-        [ $quiet ] || tMSg 0 "is_float: '$1' is not a valid float"
+        [ $quiet ] || tMsg 0 "is_float: '$1' is not a valid float"
         return 1
     fi
 }
@@ -228,10 +228,10 @@ is_prob() {
     local quiet="" floatexpr="[0-9]*\\.?[0-9]+([eE][+-]?[0-9]+)?"
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ (^${floatexpr}$) ]]; then
-        [ $quiet ] || tMSg 0 "is_prob: '$1' is not a valid probability"
+        [ $quiet ] || tMsg 0 "is_prob: '$1' is not a valid probability"
         return 1
     elif ! (( $(echo "$1 >= 0.0 && $1 <= 1.0" | bc -l) )); then
-        [ $quiet ] || tMSg 0 "is_prob: '$1' must be between 0.0 and 1.0"
+        [ $quiet ] || tMsg 0 "is_prob: '$1' must be between 0.0 and 1.0"
         return 1
     fi
 }
@@ -241,10 +241,10 @@ is_logprob() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     # Log probability must be <= 0 (since log(p) where 0 < p <= 1)
     if ! is_float -q "$1"; then
-        [ $quiet ] || tMSg 0 "is_logprob: '$1' is not a valid float"
+        [ $quiet ] || tMsg 0 "is_logprob: '$1' is not a valid float"
         return 1
     elif ! (( $(echo "$1 <= 0.0" | bc -l) )); then
-        [ $quiet ] || tMSg 0 "is_logprob: '$1' must be <= 0.0"
+        [ $quiet ] || tMsg 0 "is_logprob: '$1' must be <= 0.0"
         return 1
     fi
 }
@@ -253,7 +253,7 @@ is_complex() {
     local quiet="" floatexpr="[0-9]*\\.?[0-9]+([eE][+-]?[0-9]+)?"
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ (^${floatexpr}(\+${floatexpr}[ij])?$) ]]; then
-        [ $quiet ] || tMSg 0 "is_prob: '$1' is not a valid complex"
+        [ $quiet ] || tMsg 0 "is_prob: '$1' is not a valid complex"
         return 1
     fi
 }
@@ -285,20 +285,27 @@ EOF
             0|false|no|off|n) return 0 ;;
         esac
     fi
-    [ $quiet ] || tMSg 0 "is_bool: '$value' is not a valid boolean"
+    [ $quiet ] || tMsg 0 "is_bool: '$value' is not a valid boolean"
     return 1
 }
 
 
 # Time/date type validation functions
-# TODO Add US/UK/local forms? microseconds? i/f strptime?
+# TODO Add locale forms? locale forms: %c datetime, %x date, %X time
+# if strftime -s timestamp -r '%c' "$datestring" 2>/dev/null; then
+#     tMsg info "Valid date/time: $datestring -> $timestamp"
+#     return 0
+# else
+#     tMsg error "Invalid date/time: $datestring"
+#     return 1
+# fi
 #
 is_time() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     # Basic time format: HH:MM or HH:MM:SS
     if [[ ! "$1" =~ ^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$ ]]; then
-        [ $quiet ] || tMSg 0 "is_time: '$1' is not a valid time (HH:MM or HH:MM:SS)"
+        [ $quiet ] || tMsg 0 "is_time: '$1' is not a valid time (HH:MM or HH:MM:SS)"
         return 1
     fi
 }
@@ -309,7 +316,7 @@ is_date() {
     # Validate ISO8601 date format
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%d" "$1" "+%s" &>/dev/null 2>&1; then
-        [ $quiet ] || tMSg 0 "is_date: '$1' is not a valid ISO8601 date"
+        [ $quiet ] || tMsg 0 "is_date: '$1' is not a valid ISO8601 date"
         return 1
     fi
 }
@@ -320,7 +327,7 @@ is_datetime() {
     # Validate ISO8601 datetime format
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%dT%H:%M:%S" "$1" "+%s" &>/dev/null 2>&1; then
-        [ $quiet ] || tMSg 0 "is_datetime: '$1' is not a valid ISO8601 datetime"
+        [ $quiet ] || tMsg 0 "is_datetime: '$1' is not a valid ISO8601 datetime"
         return 1
     fi
 }
@@ -330,7 +337,7 @@ is_duration() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     # Simple duration: number followed by unit (s, m, h, d) TODO: beef it up.
     if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
-        [ $quiet ] || tMSg 0 "is_duration: '$1' is not a valid duration (e.g., 5s, 2.5h, 3d)"
+        [ $quiet ] || tMsg 0 "is_duration: '$1' is not a valid duration (e.g., 5s, 2.5h, 3d)"
         return 1
     fi
 }
@@ -340,7 +347,7 @@ is_epoch() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if ! is_float "$1"; then
-        [ $quiet ] || tMSg 0 "is_epoch: '$1' is not a valid epoch timestamp"
+        [ $quiet ] || tMsg 0 "is_epoch: '$1' is not a valid epoch timestamp"
         return 1
     fi
 }

@@ -2,25 +2,31 @@
 # Create a new argument parser
 
 zerg_new() {
+    local -A zerg_opts=(
+        [add_help]="Automatically add a '--help -h' option"
+        [allow_abbrev]="Allow abbreviated option names (default: on)"
+        [abbrev_enums]="Allow abbreviated enum values"
+        [description]="TEXT: Description for help text"
+        [description_paras]="Retain blank lines in 'description'"
+        [epilog]="TEXT: Show at end of help"
+        [help_file]="path: to help information"
+        [help_tool]="name: of a renderer for help information"
+        [ignore_case]="Enable case-insensitive option matching"
+        [ignore_hyphens]="E.g. 'out-file' and 'outfile' are the same"
+        [ic_choices]="Ignore case on choices values"
+        [on_redefine]="[error|warn|allow|ignore]: What redefining parser or arg does "
+        [usage]="Show shorter help, mainly list of options"
+        [var_style]="separate (default) | assoc: How to store results"
+    )
+
     if [[ "$1" == "-h" ]]; then
-        cat <<'EOF'
+        local pr=`typeset -p zerg_opts | sed -e 's/\[/\n    --/g' -e 's/_/-/g' -e 's/]=/ \t/'`
+        cat <<EOF
 Usage: zerg_new parser_name [options]
 Create a new argument parser.
 
-Options:
-  --add-help            Automatically add a "--help -h" option
-  --allow_abbrev        Allow abbreviated option names (default: on)
-  --description TEXT    Description for help text
-  --description-paras   Retain blank lines in `description`.
-  --epilog TEXT         Show at end of help
-  --on-redefine V       Redefining parser or arg does error|warn|allow|ignore
-  --help-file path      Path to help information
-  --help-tool name      Name of a renderer for help information
-  --ignore-case         Enable case-insensitive option matching
-  --ignore-hyphens      E.g. "out-file" and "outfile" are the same
-  --ic-choices          Ignore case on --choices values
-  --usage               Show shorter help, mainly list of options
-  --var-style STYLE     How to store results: 'separate' (default) or 'assoc'
+Options (flag options can be turned off via --no-...._:
+$pr
 
 Example:
   zerg_new MYPARSER --description "My cool script"
@@ -40,7 +46,7 @@ EOF
 
     # Check if already exists, and deal.
     if typeset -p "$parser_name" &>/dev/null; then
-        local disp=$(aa_get "$parser_name" "__on_redefine")
+        local disp=$(aa_get "$parser_name" "on_redefine")
         # TODO: When is option parsed???
         if [[ $disp == error ]]; then
             tMsg 0 "zerg_new: Error: Parser '$parser_name' already exists."
@@ -53,64 +59,89 @@ EOF
         elif [[ $disp == allow ]]; then
             zerg_del "$parser_name"
         else
-            tMsg 0 "Unknown value '$disp' for --on-redefine."
+            tMsg 0 "new: For --on-redefine: Unknown value '$disp'."
             return 89
         fi
     fi
 
-    # Create hidden parser registry assoc
+    # Create hidden parser registry assoc with defaults
+    #setopt xtrace
+    echo "pname '$parser_name'"
     typeset -ghA "$parser_name"
-
-    # Set defaults
-    aa_set "$parser_name" "__allow_abbrev" "1"
-    aa_set "$parser_name" "__arg_names" ""
-    #aa_set "$parser_name" "__description" ""
-    #aa_set "$parser_name" "__epilog" ""
-    aa_set "$parser_name" "__ignore_case" "0"  # TODO Use ""
-    aa_set "$parser_name" "__on_redefine" "error"
-    #aa_set "$parser_name" "__usage" ""
-    aa_set "$parser_name" "__var_style" "separate"
+    aa_set $parser_name add_help ""
+    aa_set $parser_name allow_abbrev 1
+    aa_set $parser_name abbrev_enums 1
+    aa_set $parser_name description ""
+    aa_set $parser_name description_paras ""
+    aa_set $parser_name epilog ""
+    aa_set $parser_name help_file ""
+    aa_set $parser_name help_tool ""
+    aa_set $parser_name ignore_case 1
+    aa_set $parser_name ignore_hyphens ""
+    aa_set $parser_name ic_choices ""
+    aa_set $parser_name on_redefine "error"
+    aa_set $parser_name usage ""
+    aa_set $parser_name var_style "separate"
+    aa_set $parser_name arg_names ""
 
     # Parse options
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --allow-abbrev|--abbrev-options)
+                aa_set "$parser_name" "allow_abbrev" "1"
+                shift ;;
+            --no-allow-abbrev|--no-abbrev-options)
+                aa_set "$parser_name" "allow_abbrev" ""
+                shift ;;
+            --abbrev-enums )
+                aa_set "$parser_name" "enum_abbrev" "1"
+                shift ;;
+            --no-abbrev-enums )
+                aa_set "$parser_name" "enum_abbrev" ""
+                shift ;;
             --description)
-                aa_set "$parser_name" "__description" "$2"
+                aa_set "$parser_name" "description" "$2"
                 shift 2 ;;
             --description-paras)
-                aa_set "$parser_name" "__description-paras" 1
+                aa_set "$parser_name" "description_paras" 1
                 shift ;;
             --epilog)
-                aa_set "$parser_name" "__epilog" "$2"
+                aa_set "$parser_name" "epilog" "$2"
                 shift 2 ;;
             --help-file)
-                aa_set "$parser_name" "__help_file" "$2"
+                aa_set "$parser_name" "help_file" "$2"
                 shift 2 ;;
             --help-tool)
-                aa_set "$parser_name" "__help_tool" "$2"
+                aa_set "$parser_name" "help_tool" "$2"
                 shift 2 ;;
-            --ignore-case|-i)
-                aa_set "$parser_name" "__ignore_case" "1"
+            --ignore-case-enums)
+                aa_set "$parser_name" "ignore_case_enums" "1"
+                shift ;;
+            --no-ignore-case-enums)
+                aa_set "$parser_name" "ignore_case" ""
+                shift ;;
+            --ignore-case-options|--ignore-case|-i)
+                aa_set "$parser_name" "ignore_case" "1"
+                shift ;;
+            --no-ignore-case-options|--no-ignore-case)
+                aa_set "$parser_name" "ignore_case_enums" ""
                 shift ;;
             --ignore-hyphens)
-                aa_set "$parser_name" "__ignore_hyphens" "1"
+                aa_set "$parser_name" "ignore_hyphens" "1"
                 tMsg 0 "--ignore-hyphens is unfinished."
                 shift ;;
-            --allow-abbrev|--abbrev)
-                aa_set "$parser_name" "__allow_abbrev" "1"
-                shift ;;
-            --no-allow_abbrev|--no-abbrev)
-                aa_set "$parser_name" "__allow_abbrev" "0"
-                shift ;;
-            --usage)_
-                aa_set "$parser_name" "__usage" ""
+            --on-redefine)
+                aa_set "$parser_name" "on_redefine" "$2"
+                shift 2;;
+            --usage)
+                aa_set "$parser_name" "usage" ""
                 shift ;;
             --var-style)
                 if [[ "$2" != "separate" && "$2" != "assoc" ]]; then
                     tMsg 0 "zerg_new: --var-style must be 'separate' or 'assoc'"
                     return 97
                 fi
-                aa_set "$parser_name" "__var_style" "$2"
+                aa_set "$parser_name" "var_style" "$2"
                 shift 2 ;;
             -*)
                 tMsg 0 "zerg_new: Unknown option: $1"
@@ -146,7 +177,7 @@ EOF
 zerg_print() {
     req_sv_type assoc "$1" || return 97
     aa_export -f view $1
-    local args=$(aa_get "$1" "$option_names")
+    local args=$(aa_get "$1" "$art_names_list")
     for arg in ${(zO)args}; do
         aa_export -f view $arg
     done
@@ -164,34 +195,46 @@ EOF
         return
     fi
 
-    # TODO toggle
-    local popts="ignore_case allow_abbrev var_style description usage epilog"
-
     req_sv_type assoc "$1" || return 97
     local p=$1
+
     print "    def processOptions() -> argparse.Namespace:\n"
     print "        parser = argparse.ArgumentParser(\n"
-    for po in ${(x)popts}; do
+
+    # TODO flag options (no value tokens following)
+    for po in ignore_case allow_abbrev var_style description usage epilog; do
         local poval=$(aa_get "$p" "$po")
-        print "            $po='$poval',\n"
+        print "            $po='$poval',"
     done
-    print "        )\n\n"
+    print "        )"
 
     local argopts="type action dest default choices const"
     argopts+=" counter flag fold on_redefine format nargs required reset help "
-    local args=$(aa_get "$1" "$option_names")
+    local args=$(aa_get "$1" "arg_names_list")
+
+    tMsg 0 "Args to export: $args"
     local cutLen=(( $#1 + 3 ))
     for arg in ${(zO)args}; do
+        sv_type $arg assoc || tMsg 0 "Bad arg storage."
+        tMsg 0 "zerg_to_argparse: $arg"
         local argShort=$arg[$cutLen:-1]
-        print "            parser.add_argument(\"$argShort\",\n"
+        local buf="            parser.add_argument(\"$argShort\""
         for ao in ${(arg)argopts}; do
             local val=$(aa_get "$arg" "$ao")
+            tMsg 0 "got $ao = $val"
             [ "$val" ] || continue
-            # TODO choices, nargs->int, help->esc
-            print "                $ao=\"$val\",\n"
+            is_int "$val" || val="'$val'"
+            local item=" $ao=$val"
+            resultLen=(($#buf + $#item))
+            if [[ resultLen > 79 ]]; then
+                print "$buf,"
+                buf="           $item"
+            else
+                buf+=", $item"
+            fi
         done
-        print "            )\n"
+        print "$buf\n            )\n"
     done
 
-    print "\n        return parser.parse_args()\n"
+    print "\n        return parser.parse_args()"
 }

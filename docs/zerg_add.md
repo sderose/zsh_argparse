@@ -98,6 +98,9 @@ does not yet exist). Typically used for *nix `-v` (verbosity) options.
 
 * `help` -- specifies that this is the option to request help.
 Typically used for `-h` and `--help`).
+NOTE: Unlike other actions, this cannot be shorted from
+`--action help` to `--help`, because there is already a `--help`
+option that does something else.
 
 * `version` -- specifies that this is the option to report that command's
 version number (typically set for `--version`).
@@ -243,10 +246,11 @@ This takes a string of (space-separated) tokens, from among which the option's
 value must be selected. If `--fold` (see below) is also set, matching will
 ignore case, though the value stored will be as given (not folded).
 
-==add_argument --nargs [int] (or -n)==
+==add_argument --nargs [int]==
 
 The number of following tokens to be consumed for the value.
-This almost always defaults, to 0 or 1 depending on `--action`.
+This almost always defaults to 0 or 1 depending on `--action`.
+It also accepts "remainder" to take all remaining arguments.
 
 ==add_argument --const [value] (or -k)==
 
@@ -260,7 +264,10 @@ leading hyphens) is used.
 
 ==add_argument --fold [lower|upper|none]==
 
-Whether to convert the value to  uniform case before storing
+Whether to convert the value to uniform case before storing.
+Not to be confused with the zerg *parser* options --ignore-case
+and --ignore-case-enums, which control how option names themselves
+and the value of `choices` arguments, are matched.
 
 TODO: Update code and doc to support this.
 

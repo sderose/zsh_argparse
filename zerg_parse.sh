@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Main argument parsing functions for zerg (zsh argument parser)
 #
-# TODO Add export to Python argparse, zsh case, zsh autocomplete.
+# TODO Add export to zsh case form, zsh autocomplete?
 
 if ! [ $ZERG_SETUP ]; then
     echo "Source zerg_setup.sh first." >&2
@@ -135,7 +135,7 @@ _zerg_process_option() {
     local parser_name="$1" def_name="$2" option_name="$3"
     local -n cmdline_ref="$4"
     local -n index_ref="$5"
-    local enum_case_ignore="$6" enum_abbrevs="$7"
+    local case_ignore_enums="$6" abbrev_enums="$7"
 
     # Get metadata from definition
     local action=$(aa_get -q "$def_name" "action")
@@ -262,7 +262,7 @@ _zerg_process_option() {
             local -a validated_values
             for value in "${values[@]}"; do
                 local validated
-                if ! validated=$(_zerg_validate_type "$value" "$type" "$choices" "$pattern" "$enum_case_ignore" "$enum_abbrevs" "$fold"); then
+                if ! validated=$(_zerg_validate_type "$value" "$type" "$choices" "$pattern" "$case_ignore_enums" "$abbrev_enums" "$fold"); then
                     return 94
                 fi
                 validated_values+=("$validated")
@@ -321,30 +321,23 @@ _zerg_process_flag_option() {
 }
 
 ###############################################################################
-# Main parsing function
-# Usage: zerg_parse parser_name [options] -- [command_line_args...]
 #
 zerg_parse() {
     if [[ "$1" == "-h" ]]; then
         cat <<'EOF'
-Usage: zerg_parse parser_name [options] -- [command_line_args...]
+Usage: zerg_parse parser_name [command_line_args...]
 Parse command line arguments using the specified parser.
 
-Options:
-  --option-case-ignore      Enable case-insensitive option matching (default)
-  --no-option-case-ignore   Disable case-insensitive option matching
-  --enum-case-ignore        Enable case-insensitive enum matching (default)
-  --no-enum-case-ignore     Disable case-insensitive enum matching
-  --enum-abbrevs            Allow abbreviated enum values (default)
-  --no-enum-abbrevs         Disable abbreviated enum values
-
-The -- separator is required before command line arguments.
+Options: None (but see options on zerg_new)
 
 Example:
-  zerg_parse MYPARSER -- "$@"
-  zerg_parse MYPARSER --no-option-case-ignore -- "$@"
+  zerg_parse MYPARSER "$@"
 EOF
         return
+    fi
+    local parse_v=""
+    if [[ "$1" == "-v" ]]; then
+        parse_v=1; shift;
     fi
 
     req_argc 1 99 $# || return 98
@@ -355,40 +348,20 @@ EOF
     if ! typeset -p "$parser_name" &>/dev/null; then
         tMsg 0 "zerg_parse: Parser '$parser_name' does not exist"
         return 98
+    elif [ parse_v ]; then
+        echo "Parser is stored as:"
+        typeset -p $parser_name
+        echo ""
     fi
 
     # Get parser settings
-    local option_case_ignore=$(aa_get -q -d "1" "$parser_name" "__ignore_case")
-    local abbrev=$(aa_get -q -d "1" "$parser_name" "__abbrev")
+    local abbrev_enums=$(aa_get -q -d "1" "$parser_name" "__abbrev")
+    local abbrev_options=$(aa_get -q -d "1" "$parser_name" "__abbrev")
+    local case_ignore_enums=$(aa_get -q -d "1" "$parser_name" "__abbrev")
+    local case_ignore_options=$(aa_get -q -d "1" "$parser_name" "__ignore_case")
     local var_style=$(aa_get -q -d "separate" "$parser_name" "__var_style")
 
-    # Parse-time overrides
-    local enum_case_ignore=1
-    local enum_abbrevs=1
     local -a cmdline_args
-
-    # Parse zerg_parse options
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --option-case-ignore) option_case_ignore=1; shift ;;
-            --no-option-case-ignore) option_case_ignore=0; shift ;;
-            --enum-case-ignore) enum_case_ignore=1; shift ;;
-            --no-enum-case-ignore) enum_case_ignore=0; shift ;;
-            --enum-abbrevs) enum_abbrevs=1; shift ;;
-            --no-enum-abbrevs) enum_abbrevs=0; shift ;;
-            --)
-                shift
-                break ;;
-            -*)
-                tMsg 0 "zerg_parse: Unknown option: $1"
-                return 97 ;;
-            *)
-                tMsg 0 "zerg_parse: Unexpected argument before '--': $1"
-                return 96 ;;
-        esac
-    done
-
-    # Collect command line arguments
     cmdline_args=("$@")
 
     # Build option lookup tables
@@ -396,12 +369,12 @@ EOF
     local -a required_dests
 
     # Get registered refnames for defined arguments
-    local registered=$(aa_get -q "$parser_name" "__arg_names")
+    local registered=$(aa_get -q "$parser_name" "arg_names_list")
+    print ${${(P)parser_name}[arg_names_list]}
     if [[ -z "$registered" ]]; then
         tMsg 0 "zerg_parse: No arguments registered in parser '$parser_name'"
         return 95
     fi
-
     local -a refnames
     refnames=(${=registered})
 
@@ -469,14 +442,6 @@ EOF
         local arg="${cmdline_args[i]}"
 
         case "$arg" in
-            --)
-                # End of options marker
-                (( i++ ))
-                while [[ $i -le ${#cmdline_args} ]]; do
-                    positional_args+=("${cmdline_args[i]}")
-                    (( i++ ))
-                done
-                break ;;
             --*)
                 # Long option
                 local option_name="$arg"
@@ -487,7 +452,7 @@ EOF
                     matched_def="${long_options[$option_name]}"
                 elif [[ $abbrev -eq 1 ]]; then
                     # Try abbreviation matching
-                    aa_find_key -x '__*' long_options "$option_name" "$option_case_ignore"
+                    aa_find_key -x '__*' long_options "$option_name" "$case_ignore_options"
                     case $? in
                         1) matched_def="$_aa_matched_key" ;;
                         0)
@@ -503,7 +468,7 @@ EOF
                 fi
 
                 # Process the matched option
-                if ! _zerg_process_option "$parser_name" "$matched_def" "$option_name" cmdline_args i $enum_case_ignore $enum_abbrevs; then
+                if ! _zerg_process_option "$parser_name" "$matched_def" "$option_name" cmdline_args i $case_ignore_enums $abbrev_enums; then
                     return 89
                 fi
 
@@ -531,7 +496,7 @@ EOF
                     # Check if this is the last option in the bundle
                     if [[ $j -eq ${#opt_string} ]]; then
                         # Last option - can take arguments
-                        if ! _zerg_process_option "$parser_name" "$matched_def" "$short_opt" cmdline_args i $enum_case_ignore $enum_abbrevs; then
+                        if ! _zerg_process_option "$parser_name" "$matched_def" "$short_opt" cmdline_args i $case_ignore_enums $abbrev_enums; then
                             return 88
                         fi
                     else
@@ -549,6 +514,7 @@ EOF
                 done ;;
             *)
                 # Positional argument
+                break;
                 positional_args+=("$arg") ;;
         esac
 
@@ -563,7 +529,7 @@ EOF
         fi
     done
 
-    # TODO: Handle positional arguments properly
+    # TODO: Handle positional arguments explicitly?
     if [[ ${#positional_args} -gt 0 ]]; then
         tMsg 1 "zerg_parse: Positional arguments not yet supported: ${positional_args[*]}"
     fi

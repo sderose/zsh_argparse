@@ -236,7 +236,16 @@ EOF
     local arrayname="$1" key="$2" value="$3"
 
     # Use parameter expansion to set the value indirectly
-    eval "${arrayname}[${(q)key}]='${(q)value}'"
+    # Single-q the key, b/c qq would store the quotes.
+    # But double-q the value, so we don't store backslashes.
+    #tMsg 0 "Evaluating 1: ${arrayname}[${(q)key}]='${(qq)value}'"
+    local evalString="${arrayname}[${(q)key}]=${(qq)value}"
+    eval $evalString
+    local rc=$?
+    if [ $? != 0 ]; then
+        tMsg 0 "aa_set $1 $2 $3 failed (rc $rc) on eval of $evalString"
+        return 90
+    fi
 }
 
 # Get a value from a named associative array
@@ -290,7 +299,8 @@ aa_unset() {
     if [[ "$1" == "-h" ]]; then
         cat <<'EOF'
 Usage: aa_unset arrayname key
-Delete a key from a named associative array.
+Delete the item with the given key from a named associative array.
+Note: To unset an entire associative array, just use `unset [name]`.
 EOF
         return
     fi
@@ -332,6 +342,7 @@ EOF
 
     #echo "keys:  $keys[@]"
     if [[ -n "$target_array" ]]; then
+        #tMsg 0 "Evaluating 2: typeset -ga $target_array=($keys[@])"
         eval "typeset -ga $target_array=($keys[@])"
     else
         printf '%q ' "${keys[@]}"
@@ -359,6 +370,7 @@ EOF
     values=(${(v)${(P)arrayname}})
 
     if [[ -n "$target_array" ]]; then
+        #tMsg 0 "Evaluating 3: ${target_array}=(\${values[@]})"
         eval "${target_array}=(\${values[@]})"
     else
         printf '%q ' "${values[@]}"
@@ -368,24 +380,26 @@ EOF
 aa_export() {
     if [[ "$1" == "-h" ]]; then
         cat <<'EOF'
-Usage: aa_export [-f format] arrayname
+Usage: aa_export [options] arrayname
 Export associative array to various formats.
+Options:
+    -q | --quiet: Suppress error messages
+    -f | --format: What form to export to. Default: python.
 Formats:
   python     - Python dict syntax: {"key": "value", ...}
   json       - JSON object syntax: {"key": "value", ...}
   htmltable  - HTML table with key/value columns
   htmldl     - HTML definition list
-  typeset    - zsh typeset format: ( [key]=value [key2]=value2 )
+  zsh        - zsh (qq)) format: ( [key]=value [key2]=value2 )
   view       - pretty-printed
-Default: python.
-TODO Integrate str_escape
 EOF
         return
     fi
 
-    local format="python"
+    local format="python" quiet=""
     while [[ "$1" == -* ]]; do
         case "$1" in
+            -q|--quiet) quiet=1 ;;
             -f|--format) format="$2"; shift 2 ;;
             *) tMsg 0 "aa_export: Unknown option $1"; return 99 ;;
         esac
@@ -447,8 +461,8 @@ EOF
             echo -n "( "
             for key in "${keys[@]}"; do
                 local value=$(aa_get -q "$1" "$key")
-                local quoted_key=$(str_escape -f typeset "$key")
-                local quoted_value=$(str_escape -f typeset "$value")
+                local quoted_key=$(str_escape -f zsh "$key")
+                local quoted_value=$(str_escape -f zsh "$value")
                 echo -n "[${quoted_key}]=${quoted_value} "
             done
             echo ")" ;;

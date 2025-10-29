@@ -63,15 +63,18 @@ testOutput() {
     fi
     local expect="$1"
     shift
-    local x=`"$@"`
+    local gotten=`"$@"`
     local rc=$?
-    if [[ "$x" == "$expect" ]]; then
+    if [[ "$gotten" == "$expect" ]]; then
         tMsg 1 "PASS: $@"
         return 0
     fi
-    echo "Failed: $@\n    expected '$expect' (len ${#expect})\n     but got '$x'  (len ${#x}, RC $rc)" >&2
+    echo "FAIL: $@" >&2
+    echo "  Lengths: expect $#expect, gotten $#gotten."
+    typeset -p expect >&2
+    typeset -p gotten >&2
     #print_chars $expect
-    #print_chars $x
+    #print_chars $gotten
     ((FAILCT+=1))
     return 1
 }
@@ -83,13 +86,13 @@ testEQ() {
     fi
     local expect="$1"
     shift
-    local x=$("$@")
+    local gotten=$("$@")
     local rc=$?
-    if [[ "$x" == "$expect" ]]; then
+    if [[ "$gotten" == "$expect" ]]; then
         tMsg 1 "PASS: $@"
         return 0
     fi
-    tMsg 0 "FAIL: $@\n    expected '$expect'\n     but got '$x' (and RC $rc)"
+    tMsg 0 "FAIL: $@\n    expected '$expect'\n     but got '$gotten' (and RC $rc)"
     ((FAILCT+=1))
     return 1
 }
