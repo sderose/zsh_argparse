@@ -1,4 +1,6 @@
+==Information on [zerg_setup.sh]==
 
+zerg_setup
 There are types for integers in particular bases,
 floats that must be valid probabilities or log probabilities;
 strings with various constraints such as being single tokens, urls, etc.;

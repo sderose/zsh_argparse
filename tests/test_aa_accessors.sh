@@ -45,7 +45,7 @@ unset VN AAA
 VN="AAA"
 
 tHead "Testing init/set/etc."
-testRC FAIL aa_get $VN no_var
+testRC FAIL aa_get -q $VN no_var
 
 testRC 0 aa_init $VN
 testOutput 0 aa_len $VN
@@ -60,7 +60,7 @@ testOutput "3.14159" aa_get AAA pi
 testRC 0 aa_set $VN greet "hello, there"
 testOutput "hello, there" aa_get AAA greet
 
-typeset -p $VN
+#typeset -p $VN
 testOutput 3 aa_len $VN
 
 
@@ -74,21 +74,20 @@ testOutput "dval" aa_get -d dval $VN not_a_key
 
 
 tHead "Getting non-item"
-testRC 1 aa_get $VN nope
-echo "Did we see em?"
+testRC FAIL aa_get -q $VN nope
+#echo "Did we see em?"
 
 
 tHead "Testing has/unset"
-typeset -p $VN
+#typeset -p $VN
 testRC 0 aa_has $VN greet
-echo "unsetting 'greet'"
+#echo "unsetting 'greet'"
 testRC 0 aa_unset $VN greet
-typeset -p $VN
+#typeset -p $VN
 
 testRC FAIL aa_has $VN greet
 testRC FAIL aa_get $VN greet
-
-typeset -p $VN
+#typeset -p $VN
 
 
 tHead "Testing keys/values/clear"
@@ -96,13 +95,13 @@ testRC PASS aa_keys $VN
 testRC PASS aa_values $VN
 testRC PASS aa_clear $VN
 testOutput "0"  aa_len $VN
-typeset -p $VN
+#typeset -p $VN
 
 
 ###############################################################################
 #
 tHead "Testing sv_quote"
-testRC FAIL sv_quote NOBODY_HOME
+testRC FAIL sv_quote -q NOBODY_HOME
 testOutput "'foo'" sv_quote aav_x
 testOutput "134217727" sv_quote aav_y
 testOutput "1.6180338000" sv_quote aav_phi
@@ -114,7 +113,7 @@ testRC PASS aa_eq aav_asc aav_colors
 
 
 tHead "Testing sv_tostring"
-testRC FAIL sv_tostring NOBODY_HOME
+testRC FAIL sv_tostring -q NOBODY_HOME
 testOutput "foo" sv_tostring aav_x
 testOutput "134217727" sv_tostring aav_y
 testOutput "1.6180338000" sv_tostring aav_phi
@@ -147,24 +146,21 @@ tHead "Testing aa_export"
 
 unset htmltableForm htmldlForm jsonForm pythonForm zshForm
 htmltableForm='<table id="aav_asc">
-<thead><tr><th>Key</th><th>Value</th></tr></thead>
-<tbody>
-<tr><td>magenta</td><td>a mixture</td></tr>
-<tr><td>red</td><td>1</td></tr>
-<tr><td>green</td><td>2</td></tr>
-</tbody>
+    <thead><tr><th>Key</th><th>Value</th></tr></thead>
+    <tbody>
+    <tr><td>magenta</td><td>a mixture</td></tr>
+    <tr><td>red</td><td>1</td></tr>
+    <tr><td>green</td><td>2</td></tr>
+    </tbody>
 </table>'
-testOutput "$htmltableForm" aa_export -f htmltable aav_asc
+testOutput "$htmltableForm" aa_export -f htmltable --lines aav_asc
 
 htmldlForm='<dl id="aav_asc">
-<dt>magenta</dt>
-<dd>a mixture</dd>
-<dt>red</dt>
-<dd>1</dd>
-<dt>green</dt>
-<dd>2</dd>
+    <dt>magenta</dt><dd>a mixture</dd>
+    <dt>red</dt><dd>1</dd>
+    <dt>green</dt><dd>2</dd>
 </dl>'
-testOutput "$htmldlForm" aa_export -f htmldl aav_asc
+testOutput "$htmldlForm" aa_export --format htmldl --lines aav_asc
 
 jsonForm='{"magenta": "a mixture", "red": "1", "green": "2"}'
 testOutput "$jsonForm" aa_export -f json aav_asc
@@ -172,8 +168,8 @@ testOutput "$jsonForm" aa_export -f json aav_asc
 pythonForm='aav_asc = {"magenta": "a mixture", "red": "1", "green": "2"}'
 testOutput "$pythonForm" aa_export -f python aav_asc
 
-zshForm="( [magenta]='a mixture' [red]=1 [green]=2 )"
-testOutput "$zshFormForm" aa_export -f zsh aav_asc
+zshForm="( [magenta]=\"a mixture\" [red]=1 [green]=2 )"
+testOutput "$zshForm" aa_export -f zsh aav_asc
 
 
 tHead "Total fails: $FAILCT."

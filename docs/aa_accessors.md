@@ -10,11 +10,13 @@ these functions, which largely mirror the methods on Python dicts:
 * aa_set [varname] [membername] [value]
 
 Sets the given member to the given value, in the associated array
-named by [varname].
+named by `varname`.
 
-* aa_get [varname] [membername]
+* aa_get [-d default] [varname] [membername]
 
-Retrieves the given member and echoes it to stdout.
+Retrieves the given member and echoes it to stdout. If the key is not
+present in the associative array, but a default value is supplied via `-d`,
+the default value is returned. See also `aa_get_abbrev`.
 
 * aa_has [varname] [membername]
 
@@ -32,12 +34,13 @@ TODO: Need to adding quoting for values that aren't single tokens.
 
 * aa_unset [varname] [membername]
 
-Removes the given member via unset.
+Removes the given member via `unset`.
 
 * aa_init [varname]
 
 Create the named associative array if it doesn't exist already.
-This does not clear data if the aa already exists; for that see aa_clear.
+This does not clear data if the associative array already exists; for
+that see `aa_clear`.
 
 * aa_clear [varname]
 
@@ -47,31 +50,34 @@ Removes all items from the named associative array.
 
 TODO: Don't like the return codes and global.
 
-Searches the associative array for items whose names begin with [abbrev].
-If exactly one is found, its full name is saved in _argparse_matched_key
+Searches the associative array for items whose names begin with `abbrev`.
+If exactly one is found, its full name is saved in `_argparse_matched_key`
 and the function returns with error code 1.
 If none are found, returns code 0.
 If more than one is found, the abbreviation is not unique, and it returns code 2.
 
-* aa_get_abbrev [varname] [abbrev]
+* aa_get_abbrev [-d default] [varname] [abbrev]
 
-Essentially like aa_find_key, but if a unique key is found it is sent to
-stdout rather than stored in _argparse_matched_key. On failure (rc 0 or 2),
+Essentially like `aa_find_key`, but if a unique key is found it is sent to
+stdout rather than stored in `_argparse_matched_key`. If no matching key is
+present in the associative array, but a default value is supplied via `-d`,
+the default value is returned. On failure such as an ambiguous key or a key
+that is not found and there is not default,
 an error message goes to stderr.
 
 * aa_copy source_array target_array
 
-Make target_array be an exact copy of source_array. target_array is created
+Make `target_array` be an exact copy of `source_array`. `target_array` is created
 or cleared if needed.
 
 * aa_update target_array source_array
 
-Copy values from the source_array to the target_array, whether they are
-already there or not. Leave other members of target_array unchanged
+Copy values from the `source_array` to the `target_array`, whether they are
+already there or not. Leave other members of `target_array` unchanged
 
 * aa_setdefault [varname] [membername] [dftvalue]
 
-Like aa_set, but only acts if the specified member does not already exist.
+Like `aa_set`, but only acts if the specified member does not already exist.
 If it already exists it is left unchanged.
 
 * aa_equals [varname1] [varname1]
@@ -85,21 +91,17 @@ other doesn't abbreviate the same, they don't match.
 Convert the named associative array to the specified alternate format, which
 must be one of:
 
-* python
+* `python` Python dict syntax: {'key': 'value', ...}
 
-Python dict syntax: {'key': 'value', ...}
+* `json` JSON object syntax: {"key": "value", ...}
 
-* json
+* `html-table` HTML table with key/value columns
 
-JSON object syntax: {"key": "value", ...}
+* `html-dl` HTML definition list
 
-* html-table
+* `zsh` Form that can be passed to zsh "typeset", as produced by
+${(q)key} and ${(qq)value}. For example
 
-HTML table with key/value columns
-
-* html-dl
-HTML definition list
-
-* typeset
-
-Form that can be passed to zsh "typeset": ( [key]=value [key2]=value2 )
+```
+    ( [key]="value" [key2]="value2" )
+```

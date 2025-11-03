@@ -3,7 +3,7 @@
 
 if ! [ $ZERG_SETUP ]; then
     echo "Source zerg_setup.sh first." >&2
-    return 99
+    return ZERR_UNDEF
 fi
 
 # Known argument types/forms (distinguishes typed forms like hexint).
@@ -25,39 +25,57 @@ typeset -A zerg_types=(
 )
 
 is_type_name() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<EOF
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: is_type_name name
 Test if the argument is a known zerg datatype name, namely:
     ${(k)zerg_types}
 Returns: 0 if valid, 1 if not
 EOF
-        return
-    fi
-    local quiet=""
-    [[ "$1" == "-q" ]] && quiet=1 && shift
+            return ;;
+        -q|--quiet) quiet=1;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
     [[ " ${(k)zerg_types[@]} " =~ " $1 " ]] && return 0
     [ $quiet ] || tMsg 0 "is_type_name: '$1' is not a recognized zerg type name."
-    return 1
+    return ZERR_ENUM
 }
 
 # Dispatcher function - calls the appropriate is_* function for a type
 is_of_zerg_type() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<EOF
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: is_of_zerg_type typename value
 Test if the value matches the given zerg datatype name, one of:
     ${(k)zerg_types}
 Returns: 0 if valid, 1 if not
 EOF
-        return
-    fi
+            return ;;
+        -q|--quiet) quiet=1;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
     if ! is_type_name "$1"; then
         tMsg 0 "is_of_zerg_type: '$1' is not a recognized zerg type name."
-        return 99
+        return ZERR_ENUM
     fi
     local testName="is_${(L)1}"
-    $testName "$2"
+    return $testName "$2"
+}
+
+ord() {
+    printf '%d\n' "'$1"
+}
+
+chr() {
+    printf "\\U$(printf '%08x' $1)"
 }
 
 
@@ -73,13 +91,15 @@ is_str() {
 }
 
 is_char() {
+    # Unicode and combining-char aware
     local quiet="" value
     [[ "$1" == "-q" ]] && quiet=1 && shift
     value="$1"
-    if [[ ${#value} -ne 1 ]]; then
-        [ $quiet ] || tMsg 0 "is_char: '$value' is not a single character"
-        return 1
-    fi
+    (( $#value == 1 )) && return 0
+    local count=$(print -rn -- "$1" | wc -m | tr -d ' ')
+    (( $count == 1 )) && return 0
+    [ $quiet ] || tMsg 0 "is_char: '$1' is not a single character."
+    return ZERR_ZERG_TVALUE
 }
 
 # Identifier patterns
@@ -92,7 +112,7 @@ is_ident() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ -z "$1" || ! "$1" =~ $ident_expr ]]; then
         [ $quiet ] || tMsg 0 "is_ident: '$1' is not a valid identifier"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -101,7 +121,7 @@ is_idents() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ -z "$1" || ! "$1" =~ $idents_expr ]]; then
         [ $quiet ] || tMsg 0 "is_idents: '$1' is not valid space-separated identifiers"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -109,7 +129,7 @@ check_re() {
     # Is this a legit regex?
     local regex="$1"
     echo "" | grep -E "$regex" 2>/dev/null
-    [[ $? == 0 ]] || [[ $? == 1 ]] || return 1
+    [[ $? == 0 ]] || [[ $? == 1 ]] || return ZERR_ZERG_TVALUE
 }
 
 is_regex() {
@@ -117,38 +137,82 @@ is_regex() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if ! check_re "$1"; then
         [ $quiet ] || tMsg 0 "is_regex: '$1' is not a valid regular expression"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
 is_path() {
-    # TODO Distinguish -e -f -d -r -w -x and (!-e && -d :h && -w :h).
-    local quiet=""
-    [[ "$1" == "-q" ]] && quiet=1 && shift
+    local quiet d e f r w x new writable
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: is_path string
+Test if the argument is a path, and optionally whether it has certain
+properties.
+Options:
+    -d -e -f -r -w -x: If one or more of these options is specified, test
+that the path exists and has the given properties (see `man zshmisc`,
+section `CONDITIONAL EXPRESSIONS`).
+    -N: path exists and was modifed since last read
+    --new: path does not exist, but the container directory does, and the path
+could be written to
+    --forcible: path may or may not exist, but the container directory does,
+and can be written to (not the same as -w, which requires existence)
+Returns: 0 if valid, 1 if not
+TODO: Possibly add [ugo][rwx] and tests for fifos, whiteouts, etc.?
+EOF
+            return ;;
+        -d|-e|-f|-r|-w|-x|-N) typeset $1[2:-1]=1 ;;
+        --new|--forcible) typeset $1[3:-1]=1 ;;
+        -q|--quiet) quiet=1 ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
     # Basic path validation - no null bytes, reasonable characters
-    local pathExpr='^/?[._\-$~#a-zA-Z0-9]*(/[._\-$~#a-zA-Z0-9]*)*$'
-    if [[ ! "$1" =~ $pathExpr ]]; then
-        [ $quiet ] || tMsg 0 "is_path: '$1' does not appear to be a valid path"
-        return 1
+    local pathExpr="^/?[._\-$~#a-zA-Z0-9]*(/[._\-$~#a-zA-Z0-9]*)*$"
+    if [[ ! "$1" =~ ($pathExpr) ]]; then
+        [ $quiet ] || tMsg 0 "is_path: '$1' does not appear to be a valid path."
+        return ZERR_ZERG_TVALUE
     fi
+
+    for perm in d e f r w x N; do
+        if [ ${(P)$perm} ] && ! [ -$perm "$pathExpr" ]; then
+            [ $quiet ] || tMsg 0 "Path $pathExpr does not satisfy -$perm."
+            return ZERR_ZERG_TVALUE
+        fi
+    done
+    if [ $new ] || [ $forcible ]; then
+        local container="$pathExpr:h"
+        if ! [ -d "$pathExpr:h" ]; then
+            [ $quiet ] || tMsg 0 "Parent dir of path $pathExpr does not exist."
+            return ZERR_ZERG_TVALUE
+        fi
+        [ $forcible ] && [ -w "$pathExpr" ] && return 0
+        [ $new ] && ! [ -e "$pathExpr" ] && return 0
+        [ $quiet ] || tMsg 0 "Path $pathExpr does not satisfy --new or --forcible."
+        return ZERR_ZERG_TVALUE
+    fi
+    return 0
 }
 
 is_url() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
-    # Basic url validation: scheme:rest
-    if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*:.+ ]]; then
+    # Basic url validation: scheme:rest. TODO: tighten up
+    local expr="^[a-zA-Z][a-zA-Z0-9+.-]*:.+"
+    if ! [[ "$1" =~ ($expr) ]]; then
         [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid url"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
 is_lang() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet=1 && shift
-    if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z][a-zA-Z]?(-[a-zA-Z])* ]]; then
-        [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid lang code"
-        return 1
+    if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z][a-zA-Z]?(-[a-zA-Z][a-zA-Z]*)* ]]; then
+        [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid language code"
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -159,7 +223,7 @@ is_format() {
     expr+="[hlLqjzt]*[diouxXeEfFgGaAcspn%]"
     if [[ ! "$1" =~ ($expr) ]]; then
         [ $quiet ] || tMsg 0 "is_url: '$1' is not a valid % format code"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -171,7 +235,7 @@ is_int() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^-?[0-9]+$ ]]; then
         [ $quiet ] || tMsg 0 "is_int: '$1' is not a valid integer"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -180,7 +244,7 @@ is_octint() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^(0)?[0-7]+$ ]]; then
         [ $quiet ] || tMsg 0 "is_octint: '$1' is not a valid octal integer"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -189,7 +253,7 @@ is_hexint() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
         [ $quiet ] || tMsg 0 "is_hexint: '$1' is not a valid hexadecimal integer"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -198,7 +262,7 @@ is_binint() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
    if [[ ! "$1" =~ ^(0b)?[01]+$ ]]; then
         [ $quiet ] || tMsg 0 "is_binint: '$1' is not a valid binary integer"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -211,7 +275,7 @@ is_anyint() {
         return 0
     else
         [ $quiet ] || tMsg 0 "is_anyint: '$1' is not a valid integer (decimal/hex/octal/binary)"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -220,7 +284,7 @@ is_float() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
         [ $quiet ] || tMsg 0 "is_float: '$1' is not a valid float"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -229,10 +293,10 @@ is_prob() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ (^${floatexpr}$) ]]; then
         [ $quiet ] || tMsg 0 "is_prob: '$1' is not a valid probability"
-        return 1
+        return ZERR_ZERG_TVALUE
     elif ! (( $(echo "$1 >= 0.0 && $1 <= 1.0" | bc -l) )); then
         [ $quiet ] || tMsg 0 "is_prob: '$1' must be between 0.0 and 1.0"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -242,10 +306,10 @@ is_logprob() {
     # Log probability must be <= 0 (since log(p) where 0 < p <= 1)
     if ! is_float -q "$1"; then
         [ $quiet ] || tMsg 0 "is_logprob: '$1' is not a valid float"
-        return 1
+        return ZERR_ZERG_TVALUE
     elif ! (( $(echo "$1 <= 0.0" | bc -l) )); then
         [ $quiet ] || tMsg 0 "is_logprob: '$1' must be <= 0.0"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -254,7 +318,7 @@ is_complex() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if [[ ! "$1" =~ (^${floatexpr}(\+${floatexpr}[ij])?$) ]]; then
         [ $quiet ] || tMsg 0 "is_prob: '$1' is not a valid complex"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -273,8 +337,7 @@ EOF
         return
     fi
     [[ "$1" == "-q" ]] && quiet=1 && shift
-    value="$1"
-    alts_ok="$2"
+    local value="$1" alts_ok="$2"
     if [[ -z "$value" || "$value" == "1" ]]; then
         return 0
     fi
@@ -286,7 +349,7 @@ EOF
         esac
     fi
     [ $quiet ] || tMsg 0 "is_bool: '$value' is not a valid boolean"
-    return 1
+    return ZERR_ZERG_TVALUE
 }
 
 
@@ -297,7 +360,7 @@ EOF
 #     return 0
 # else
 #     tMsg error "Invalid date/time: $datestring"
-#     return 1
+#     return ZERR_ZERG_TVALUE
 # fi
 #
 is_time() {
@@ -306,7 +369,7 @@ is_time() {
     # Basic time format: HH:MM or HH:MM:SS
     if [[ ! "$1" =~ ^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$ ]]; then
         [ $quiet ] || tMsg 0 "is_time: '$1' is not a valid time (HH:MM or HH:MM:SS)"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -317,7 +380,7 @@ is_date() {
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%d" "$1" "+%s" &>/dev/null 2>&1; then
         [ $quiet ] || tMsg 0 "is_date: '$1' is not a valid ISO8601 date"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -328,7 +391,7 @@ is_datetime() {
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%dT%H:%M:%S" "$1" "+%s" &>/dev/null 2>&1; then
         [ $quiet ] || tMsg 0 "is_datetime: '$1' is not a valid ISO8601 datetime"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -338,7 +401,7 @@ is_duration() {
     # Simple duration: number followed by unit (s, m, h, d) TODO: beef it up.
     if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
         [ $quiet ] || tMsg 0 "is_duration: '$1' is not a valid duration (e.g., 5s, 2.5h, 3d)"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 
@@ -348,7 +411,7 @@ is_epoch() {
     [[ "$1" == "-q" ]] && quiet=1 && shift
     if ! is_float "$1"; then
         [ $quiet ] || tMsg 0 "is_epoch: '$1' is not a valid epoch timestamp"
-        return 1
+        return ZERR_ZERG_TVALUE
     fi
 }
 

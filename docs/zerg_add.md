@@ -285,3 +285,30 @@ TODO: Finish
 This takes a zsh-style regular expression that the option value must match.
 
 TODO: Basic, extended, or PCRE? Or choice? Or zsh setting?
+
+
+==Storage==
+
+Each argument definition gets its own exported associative array, named
+by the parser that defined it, "__", and the reference name of the argument.
+For example, `MYPARSE__quiet`.
+
+The fields/items in that assoc may include those shown below (most of which
+are the same as for Python `argparse.add_argument`):
+
+* arg_names -- the list of space-separated names for the argument.
+* action --
+* choices -- (since zsh cannot store arrays as data in assocs, the choices
+are stored as a string of space-separated tokens)
+* const --
+* default --
+* dest --
+* fold -- whether the value should be folded on reading (none, lower, or upper)
+* format -- a printf-style % code fro the items preferred output format
+* help --
+* nargs --
+* pattern -- a regex that the argument's value must match.
+* required --
+* type -- see zerg_types.
+
+Items with empty values may be omitted.

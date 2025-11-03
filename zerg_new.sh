@@ -18,10 +18,10 @@ zerg_new() {
         [usage]="Show shorter help, mainly list of options"
         [var_style]="separate (default) | assoc: How to store results"
     )
-
-    if [[ "$1" == "-h" ]]; then
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR})
         local pr=`typeset -p zerg_opts | sed -e 's/\[/\n    --/g' -e 's/_/-/g' -e 's/]=/ \t/'`
-        cat <<EOF
+        cat <<'EOF'
 Usage: zerg_new parser_name [options]
 Create a new argument parser.
 
@@ -37,10 +37,13 @@ These options of Python ArgumentParser are not (yet) supported:
   prog, parents, formatter_class, prefix_chars, fromfile_prefix_chars,
   argument_default, conflict_handler, exit_on_error
 EOF
-        return
-    fi
+            return ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
 
-    req_argc 1 99 $# || return 98
+    req_argc 1 99 $# || return ZERR_ARGC
     local parser_name="$1"
     shift
 
@@ -50,7 +53,7 @@ EOF
         # TODO: When is option parsed???
         if [[ $disp == error ]]; then
             tMsg 0 "zerg_new: Error: Parser '$parser_name' already exists."
-            return 98
+            return ZERR_DUPLICATE
         elif [[ $disp == ignore ]]; then
             return 0
         elif [[ $disp == warn ]]; then
@@ -60,7 +63,7 @@ EOF
             zerg_del "$parser_name"
         else
             tMsg 0 "new: For --on-redefine: Unknown value '$disp'."
-            return 89
+            return ZERR_ENUM
         fi
     fi
 
@@ -85,8 +88,7 @@ EOF
     aa_set $parser_name arg_names ""
 
     # Parse options
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
+    while [[ "$1" == -* ]]; do case "$1" in
             --allow-abbrev|--abbrev-options)
                 aa_set "$parser_name" "allow_abbrev" "1"
                 shift ;;
@@ -139,33 +141,32 @@ EOF
             --var-style)
                 if [[ "$2" != "separate" && "$2" != "assoc" ]]; then
                     tMsg 0 "zerg_new: --var-style must be 'separate' or 'assoc'"
-                    return 97
+                    return ZERR_ENUM
                 fi
                 aa_set "$parser_name" "var_style" "$2"
                 shift 2 ;;
-            -*)
-                tMsg 0 "zerg_new: Unknown option: $1"
-                return 96 ;;
             *)
-                tMsg 0 "zerg_new: Unexpected argument: $1"
-                return 95 ;;
+                tMsg 0 "zerg_new: Unknown option: $1"; return ZERR_BAD_OPTION ;;
         esac
     done
     return 0
 }
 
 zerg_del() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<'EOF'
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_del parser_name
 Delete/destroy an argument parser and all its defined arguments.
 Arguments that were re-used from another parser are not destroyed.
 
 EOF
-        return
-    fi
+            return ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
 
-    req_sv_type assoc "$1" || return 97
+    req_sv_type assoc "$1" || return ZERR_SV_TYPE
 
     for name in "${(P)1}[@]"; do
         [[ $name =~ ^$1__ ]] || continue
@@ -175,7 +176,17 @@ EOF
 }
 
 zerg_print() {
-    req_sv_type assoc "$1" || return 97
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: zerg_print parser_name
+EOF
+            return ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    req_sv_type assoc "$1" || return ZERR_SV_TYPE
     aa_export -f view $1
     local args=$(aa_get "$1" "$art_names_list")
     for arg in ${(zO)args}; do
@@ -184,44 +195,48 @@ zerg_print() {
 }
 
 zerg_to_argparse() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<EOF
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_to_argparse parserName
 Writes out a zerg parser as roughly equivalent Python argparse calls.
 A few things don't quite transfer -- for example, zerg has quite a few more
 types, and at least one more action.
 TODO: Aliases are not yet included -- just the reference name.
+TODO: flag options (no value tokens following)
 EOF
-        return
-    fi
+            return ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
 
-    req_sv_type assoc "$1" || return 97
-    local p=$1
-
+    req_sv_type assoc "$1" || return ZERR_SV_TYPE
     print "    def processOptions() -> argparse.Namespace:\n"
     print "        parser = argparse.ArgumentParser(\n"
 
-    # TODO flag options (no value tokens following)
     for po in ignore_case allow_abbrev var_style description usage epilog; do
-        local poval=$(aa_get "$p" "$po")
+        local poval=$(aa_get "$1" "$po")
         print "            $po='$poval',"
     done
     print "        )"
 
-    local argopts="type action dest default choices const"
-    argopts+=" counter flag fold on_redefine format nargs required reset help "
-    local args=$(aa_get "$1" "arg_names_list")
+    # Keep a list of what options we've written, so aliases don't cause dups
+    local -A defname2optnames=()
 
-    tMsg 0 "Args to export: $args"
     local cutLen=(( $#1 + 3 ))
-    for arg in ${(zO)args}; do
-        sv_type $arg assoc || tMsg 0 "Bad arg storage."
-        tMsg 0 "zerg_to_argparse: $arg"
-        local argShort=$arg[$cutLen:-1]
-        local buf="            parser.add_argument(\"$argShort\""
-        for ao in ${(arg)argopts}; do
+    for arg in ${(zO)1[@]}; do
+        [ $arg == -* ] || continue
+        local argdefname=${${(P)1}[$arg]}
+        [ $defname2optnames[$argdefname] ] && continue
+        $defname2optnames[$argdefname]=1
+
+        sv_type $argdefname assoc || tMsg 0 "Bad storage for argdef '$argdefname'."
+        local arg_names=`aa_get $arg "arg_names"`
+        local arg_names_as_params=$arg_names:s/ /\", \"/
+        local buf="            parser.add_argument(\"$arg_names_as_params\""
+        for ao in ${(x)zerg_argdef_fields}; do
+            [ $ao == arg_names ] && continue
             local val=$(aa_get "$arg" "$ao")
-            tMsg 0 "got $ao = $val"
             [ "$val" ] || continue
             is_int "$val" || val="'$val'"
             local item=" $ao=$val"

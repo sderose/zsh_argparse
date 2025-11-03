@@ -3,127 +3,116 @@
 #
 # TODO Add export to zsh case form, zsh autocomplete?
 
-if ! [ $ZERG_SETUP ]; then
+if ! [[ $ZERG_SETUP == 1 ]] || [[ "$1" == "-f" ]]; then
     echo "Source zerg_setup.sh first." >&2
-    return 99
+    return ZERR_UNDEF
 fi
+
+#setopt xtrace
 
 
 ###############################################################################
-# Helper function to validate and convert a value based on type
-# Applies case folding, checks choices/patterns, validates type
-#
-_zerg_validate_type() {
-    local value="$1" type="$2" choices="$3" pattern="$4"
-    local case_ignore="$5" abbrev_ok="$6" fold="${7:-NONE}"
+_zerg_check_choices() {
+    # Return normalized choice value
+    local value="$1" choices="$2" case_ignore="$3" abbrs="$4"
 
-    # Apply case folding first
-    case "$fold:l" in
-        upper) value="${value:l}" ;;
-        lower) value="${value:l}" ;;
-        none) ;;
-    esac
+    [[ -n "$choices" ]] || return 0
 
-    # Check choices if provided
-    if [[ -n "$choices" ]]; then
-        local -A choices_map
-        local -a choice_list
-        choice_list=(${=choices})
+    local -A choices_map
+    local -a choice_list
+    choice_list=(${=choices})
 
-        # Build choices lookup
-        for choice in "${choice_list[@]}"; do
-            choices_map["$choice"]="$choice"
-        done
+    # Build choices lookup
+    for choice in "${choice_list[@]}"; do
+        choices_map["$choice"]="$choice"
+    done
 
-        # Try exact match first
-        if [[ -n "${choices_map[$value]}" ]]; then
-            echo "$value"
-            return 0
-        fi
-
-        # Try abbreviation/case-insensitive matching if enabled
-        if [[ "$abbrev_ok" == "1" || "$case_ignore" == "1" ]]; then
-            aa_find_key -x '__*' choices_map "$value" "$case_ignore"
-            local result=$?
-            case $result in
-                1)
-                    echo "$_aa_matched_key"
-                    return 0 ;;
-                0)
-                    tMsg 0 "_zerg_validate_type: '$value' is not valid. Options: ${choice_list[*]}"
-                    return 1 ;;
-                2)
-                    tMsg 0 "_zerg_validate_type: '$value' is ambiguous. Could match: ${choice_list[*]}"
-                    return 1 ;;
-            esac
-        else
-            tMsg 0 "_zerg_validate_type: '$value' is not valid. Options: ${choice_list[*]}"
-            return 1
-        fi
-    fi
-
-    # Check pattern if provided (for idents, applies to each token)
-    if [[ -n "$pattern" ]]; then
-        if [[ "$type" == "idents" ]]; then
-            # Split and validate each token
-            local -a tokens
-            tokens=(${=value})
-            for token in "${tokens[@]}"; do
-                if ! [[ "$token" =~ $pattern ]]; then
-                    tMsg 0 "_zerg_validate_type: Token '$token' does not match pattern: $pattern"
-                    return 1
-                fi
-            done
-        else
-            # Single value - check pattern
-            if ! [[ "$value" =~ $pattern ]]; then
-                tMsg 0 "_zerg_validate_type: '$value' does not match pattern: $pattern"
-                return 1
-            fi
-        fi
-    fi
-
-    # Type-specific validation  TODO Switch to is_of_zerg_type
-    case "$type" in
-        str) is_str "$value" ;;
-        char) is_char -q "$value" ;;
-        ident) is_ident -q "$value" ;;
-        idents) is_idents -q "$value" ;;
-        int) is_int -q "$value" ;;
-        hexint) is_hexint -q "$value" ;;
-        octint) is_octint -q "$value" ;;
-        binint) is_binint -q "$value" ;;
-        anyint) is_anyint -q "$value" ;;
-        float) is_float -q "$value" ;;
-        prob) is_prob -q "$value" ;;
-        logprob) is_logprob -q "$value" ;;
-        bool) is_bool -q "$value" "$abbrev_ok" ;;
-        regex) is_regex -q "$value" ;;
-        path) is_path -q "$value" ;;
-        url) is_url -q "$value" ;;
-        time) is_time -q "$value" ;;
-        date) is_date -q "$value" ;;
-        datetime) is_datetime -q "$value" ;;
-        duration) is_duration -q "$value" ;;
-        epoch) is_epoch -q "$value" ;;
-        *)
-            tMsg 0 "_zerg_validate_type: Unknown type '$type'"
-            aa_has zerg_type $type && tMsg 0 "***** Unhandled type '$type' *****"
-            return 1 ;;
-    esac
-
-    if [[ $? -eq 0 ]]; then
+    # Try exact match first
+    if [[ -n "${choices_map[$value]}" ]]; then
         echo "$value"
         return 0
+    fi
+
+    # Try abbreviation/case-insensitive matching if enabled
+    if [ "$abbrs" || "$case_ignore" ]; then
+        local chList="Choices: ${choice_list[*]}"
+        local ic=
+        aa_find_key -x $ic '__*' choices_map "$value" "$case_ignore"
+        local result=$?
+        case $result in
+            1) echo "$_aa_matched_key"; return 0 ;;
+            0) tMsg 0 "'$value' not recognized. $chList."; return ZERR_ENUM ;;
+            2) tMsg 0 "'$value' is ambiguous. $chList."; return ZERR_ENUM ;;
+        esac
     else
+        tMsg 0 "'$value' is not a valid choice. $chList."; return ZERR_ENUM
+    fi
+}
+
+_zerg_check_pattern() {
+    local value="$1" type="$2" pattern="$3"
+    [ "$pattern" ] || return 0
+
+    if [[ "$type" == "idents" ]]; then
+        # TODO Upgrade to handle plural types generally
+        # Split and validate each token
+        local -a tokens=(${=value})
+        for token in "${tokens[@]}"; do
+            if ! [[ "$token" =~ $pattern ]]; then
+                tMsg 0 "Token '$token' does not match pattern: $pattern"
+                return 1
+            fi
+        done
+    elif ! [[ "$value" =~ $pattern ]]; then
+        tMsg 0 "'$value' does not match pattern: $pattern"
         return 1
     fi
 }
 
+_zerg_check_type() {
+    local value="$1" type="$2"
+    if ! aa_has zerg_types $type; then
+        tMsg 0 "Unknown type '$type'"
+        return ZERR_ENUM
+    elif ! is_of_zerg_type $type "$value"; then
+        tMsg 0 "Argument : Value '$value' does not satisfy type '$type'"
+        return ZERR_ZERG_TVALUE
+    fi
+}
+
+
+###############################################################################
+# Help support
+#
 _zerg_help() {
+    # TODO Implement description_breaks
+    sv_type $1 assoc || exit ZERR_SV_TYPE
+    local help_file="${${(P)1}[help_file]}"
+    if [ $help_file ]; then
+        if ! [ -f "$help_file" ]; then
+            tMsg 0 "Help file '$help_file' not found."; return 1
+        fi
+        local help_tool="${${(P)1}[help_tool]}"
+        if [ $help_file ]; then
+            cat $help_file | $help_tool
+        else
+            less $help_file
+        fi
+    else
+        print ${${(P)1}[description]}
+        print "Options:"
+        _zerg_usage $1
+    fi
 }
 
 _zerg_usage() {
+    # Gather options and help strings
+    sv_type $1 assoc || exit ZERR_SV_TYPE
+    for key in "${(P)1)[@]}"; do
+        [[ $key =~ --* ]] || continue
+        local arg_def_name=${${(P)1}[$1__$key]}
+        printf "    %-12s %s\n" $key ${${(Pqq)arg_def_name}[help]}
+    done
 }
 
 
@@ -131,181 +120,185 @@ _zerg_usage() {
 # Process an option that takes a value
 # Handles all action types and nargs variations
 #
+_zerg_store_value() {
+    local var_style="$1" result_array="$2" dest="$3" value="$4"
+    if [[ "$var_style" == "assoc" ]]; then
+        aa_set "$result_array" "$dest" "1"
+    else
+        typeset -g "$dest"="1"
+    fi
+}
+
 _zerg_process_option() {
     local parser_name="$1" def_name="$2" option_name="$3"
     local -n cmdline_ref="$4"
     local -n index_ref="$5"
-    local case_ignore_enums="$6" abbrev_enums="$7"
+    local ic_choices="$6" abbrev_enums="$7"
 
-    # Get metadata from definition
-    local action=$(aa_get -q "$def_name" "action")
-    local type=$(aa_get -q "$def_name" "type")
-    local nargs=$(aa_get -q "$def_name" "nargs")
-    local choices=$(aa_get -q "$def_name" "choices")
-    local pattern=$(aa_get -q "$def_name" "pattern")
-    local dest=$(aa_get -q "$def_name" "dest")
-    local fold=$(aa_get -q "$def_name" "fold")
-
-    [[ -z "$action" ]] && action="store"
-    [[ -z "$type" ]] && type="str"
-    [[ -z "$fold" ]] && fold="none"
-
-    # Get var_style from parser settings
-    local var_style=$(aa_get -q "$parser_name" "__var_style")
-    [[ -z "$var_style" ]] && var_style="separate"
-
-    # Determine result storage location
+    # Gather info on where to store option value
+    local var_style=$(aa_get -q "$parser_name" "var_style")
+    [ "$var_style" ] && var_style="separate"
     local result_array="${parser_name}__results"
+    local dest=$(aa_get -q "$def_name" "dest")
 
     case "$action" in
         store_true)
-            if [[ "$var_style" == "assoc" ]]; then
-                aa_set "$result_array" "$dest" "1"
-            else
-                typeset -g "$dest"="1"
-            fi
+            _zerg_store_value $var_style $result_array $dest 1
             return 0 ;;
         store_false)
-            if [[ "$var_style" == "assoc" ]]; then
-                aa_set "$result_array" "$dest" ""
-            else
-                typeset -g "$dest"=""
-            fi
+            _zerg_store_value $var_style $result_array $dest ""
             return 0 ;;
         store_const)
-            local const_val=$(aa_get -q "$def_name" "const")
-            if [[ "$var_style" == "assoc" ]]; then
-                aa_set "$result_array" "$dest" "$const_val"
-            else
-                typeset -g "$dest"="$const_val"
-            fi
+            local val=$(aa_get -q "$def_name" "const")
+            _zerg_store_value $var_style $result_array $dest "$val"
             return 0 ;;
         count)
-            local current
+            local -i val
             if [[ "$var_style" == "assoc" ]]; then
-                current=$(aa_get -q -d "0" "$result_array" "$dest")
-                aa_set "$result_array" "$dest" "$((current + 1))"
+                val=$(aa_get -q -d "0" "$result_array" "$dest")
             else
-                current="${(P)dest}"
-                [[ -z "$current" ]] && current=0
-                typeset -g "$dest"="$((current + 1))"
+                val="${(P)dest}"
             fi
+            val+=1
+            _zerg_store_value $var_style $result_array $dest "$val"
             return 0 ;;
         toggle)
-            local current
+            local val
             if [[ "$var_style" == "assoc" ]]; then
-                current=$(aa_get -q "$result_array" "$dest")
-                if [[ -n "$current" && "$current" != "0" ]]; then
-                    aa_set "$result_array" "$dest" ""
-                else
-                    aa_set "$result_array" "$dest" "1"
-                fi
+                val=$(aa_get -q "$result_array" "$dest")
             else
                 current="${(P)dest}"
-                if [[ -n "$current" && "$current" != "0" ]]; then
-                    typeset -g "$dest"=""
-                else
-                    typeset -g "$dest"="1"
-                fi
             fi
+            [[ -z "$val" ]] && val=1
+            _zerg_store_value $var_style $result_array $dest ="$val"
             return 0 ;;
+
         store|append|extend)
             # These actions need argument values
-            local -a values
-            local num_args=1
-
-            case "$nargs" in
-                ""|1) num_args=1 ;;
-                "?") num_args=0 ;;
-                "*") num_args=-1 ;;
-                "+") num_args=-2 ;;
-                [0-9]*) num_args="$nargs" ;;
-                *)
-                    tMsg 0 "_zerg_process_option: Invalid nargs value: $nargs"
-                    return 97 ;;
-            esac
-
-            # Collect argument values
-            if [[ $num_args -eq 0 ]]; then
-                # Optional argument
-                if [[ $((index_ref + 1)) -le ${#cmdline_ref} && "${cmdline_ref[$((index_ref + 1))]}" != -* ]]; then
-                    (( index_ref++ ))
-                    values+=("${cmdline_ref[$index_ref]}")
-                fi
-            elif [[ $num_args -gt 0 ]]; then
-                # Fixed number of arguments
-                local j
-                for (( j=1; j<=num_args; j++ )); do
-                    if [[ $((index_ref + j)) -le ${#cmdline_ref} ]]; then
-                        values+=("${cmdline_ref[$((index_ref + j))]}")
-                    else
-                        tMsg 0 "_zerg_process_option: Option $option_name requires $num_args arguments"
-                        return 96
-                    fi
-                done
-                index_ref=$((index_ref + num_args))
-            else
-                # Variable number of arguments
-                local j=$((index_ref + 1))
-                while [[ $j -le ${#cmdline_ref} && "${cmdline_ref[$j]}" != -* ]]; do
-                    values+=("${cmdline_ref[$j]}")
-                    (( j++ ))
-                done
-                if [[ $num_args -eq -2 && ${#values} -eq 0 ]]; then
-                    tMsg 0 "_zerg_process_option: Option $option_name requires at least one argument"
-                    return 95
-                fi
-                index_ref=$((j - 1))
-            fi
-
-            # Validate and store values
-            local -a validated_values
-            for value in "${values[@]}"; do
-                local validated
-                if ! validated=$(_zerg_validate_type "$value" "$type" "$choices" "$pattern" "$case_ignore_enums" "$abbrev_enums" "$fold"); then
-                    return 94
-                fi
-                validated_values+=("$validated")
-            done
-
-            case "$action" in
-                store)
-                    if [[ ${#validated_values} -eq 1 ]]; then
-                        if [[ "$var_style" == "assoc" ]]; then
-                            aa_set "$result_array" "$dest" "${validated_values[1]}"
-                        else
-                            typeset -g "$dest"="${validated_values[1]}"
-                        fi
-                    else
-                        if [[ "$var_style" == "assoc" ]]; then
-                            aa_set "$result_array" "$dest" "${validated_values[*]}"
-                        else
-                            # TODO Offer int and float?
-                            typeset -g "$dest"="${validated_values[*]}"
-                        fi
-                    fi ;;
-                append|extend)
-                    tMsg 1 "_zerg_process_option: APPEND/EXTEND not yet implemented"
-                    if [[ "$var_style" == "assoc" ]]; then
-                        aa_set "$result_array" "$dest" "${validated_values[*]}"
-                    else
-                        typeset -g "$dest"="${validated_values[*]}"
-                    fi ;;
-            esac ;;
-        *)
-            tMsg 0 "_zerg_process_option: Unknown action '$action'"
-            return 93 ;;
+            _zerg_collectArgs $parser_name $def_name $cmdline_ref $index_ref ;;
+        *) tMsg 0 "Unknown action '$action'"; return ZERR_ENUM ;;
     esac
 
     return 0
 }
+
+
+_zerg_collectArgs() {
+    # Collect the argument's value(s), validate, and store.
+    # Needs: option_name, cmdline_ref, index_ref, nargs, var_style
+    # Returns: values, index_ref, validated_values -> result thing
+
+    local parser_name=$1 def_name=$2 cmdline_ref=$3 index_ref=$4
+
+    # Get items from parser and arg definition
+    local action=$(aa_get -q --default "store" "$def_name" "action")
+    local choices=$(aa_get -q "$def_name" "choices")
+    local fold=$(aa_get -q --default "none" "$def_name" "fold")
+    local nargs=$(aa_get -q --default 1 "$def_name" "nargs")
+    local pattern=$(aa_get -q "$def_name" "pattern")
+    local type=$(aa_get -q --default "str" "$def_name" "type")
+
+    local -a values
+    local num_args=1
+
+    [[ "$nargs" == "?" ]] && nargs=0
+
+    if [[ $nargs == "*" || $nargs == "+" ]]; then       # Variable number of args
+        local j=$((index_ref + 1))
+        while [[ $j -le ${#cmdline_ref} && "${cmdline_ref[$j]}" != -* ]]; do
+            values+=("${cmdline_ref[$j]}")
+            (( j++ ))
+        done
+        if [[ $nargs == "+" && ${#values} -eq 0 ]]; then
+            tMsg 0 "Option '$option_name' requires at least one argument."
+            return ZERR_ARGC
+        fi
+        index_ref=$((j - 1))
+    elif [[ $nargs == *REMAINDER ]]; then               # All remaining args
+        tMsg 0 "REMAINDER not yet implemented"  TODO
+    elif ! aa_is_int "$nargs" || (( $nargs < 0 )); then
+        tMsg 0 "Bad value '$nargs' for nargs for option $optname."
+        return ZERR_BAD_OPTION
+    else  # numeric (incl. erstwhile "?")
+        local -i nargs=$nargs
+        if [[ $n -eq 0 ]]; then                         # Optional arg
+            if [[ $((index_ref + 1)) -le ${#cmdline_ref} ]]; then
+                if [[ "${cmdline_ref[$((index_ref + 1))]}" != -* ]]; then
+                    (( index_ref++ ))
+                    values+=("${cmdline_ref[$index_ref]}")
+                fi
+            fi
+        else                                            # Fixed number of args
+            local j
+            for (( j=1; j<=num_args; j++ )); do
+                local curval="${cmdline_ref[$j]}"
+                if [[ $((index_ref + j)) -le ${#cmdline_ref} ]]; then
+                    values+=("${cmdline_ref[$((index_ref + j))]}")
+                else
+                    tMsg 0 "Option '$option_name' requires $num_args arguments"
+                    return ZERR_ARGC
+                fi
+            done
+            index_ref=$((index_ref + num_args))
+        fi
+    fi
+
+    # Validate values via choices, pattern, and type constraints
+    local -a validated_values
+    for value in "${values[@]}"; do
+        case "$fold:l" in
+            upper) value="$value:u" ;;
+            lower) value="$value:l" ;;
+            none) ;;
+        esac
+        local choice=`_zerg_check_choices $value $choices $ic_choices $abbrev_enums`
+        if ! [ $choice ]; then
+            tMsg 0 "Value not among choices ($choices)."
+            return ZERR_ZERG_TVALUE
+        fi
+        if ! $(_zerg_check_pattern $value $type $pattern); then
+            tMsg 0 "Value does not match pattern for type $type: '$value'."
+            return ZERR_ZERG_TVALUE
+        fi
+        if ! $(_zerg_check_type $value $type); then
+            tMsg 0 "Value does not satisfy type $type: '$value'."
+            return ZERR_ZERG_TVALUE
+        fi
+        validated_values+=("$validated")
+    done
+
+    case "$action" in
+        store)
+            if [[ ${#validated_values} -eq 1 ]]; then
+                if [[ "$var_style" == "assoc" ]]; then
+                    aa_set "$result_array" "$dest" "${validated_values[1]}"
+                else
+                    typeset -g "$dest"="${validated_values[1]}"
+                fi
+            else
+                if [[ "$var_style" == "assoc" ]]; then
+                    aa_set "$result_array" "$dest" "${validated_values[*]}"
+                else
+                    # TODO Offer int and float?
+                    typeset -g "$dest"="${validated_values[*]}"
+                fi
+            fi ;;
+        append|extend)
+            tMsg 0 "APPEND/EXTEND not yet implemented"
+            if [[ "$var_style" == "assoc" ]]; then
+                aa_set "$result_array" "$dest" "${validated_values[*]}"
+            else
+                typeset -g "$dest"="${validated_values[*]}"
+            fi ;;
+    esac
+}
+
 
 ###############################################################################
 # Helper for bundled short options that don't take arguments
 #
 _zerg_process_flag_option() {
     local parser_name="$1" def_name="$2" option_name="$3"
-
     local action=$(aa_get -q "$def_name" "action")
     [[ -z "$action" ]] && action="store"
 
@@ -315,39 +308,42 @@ _zerg_process_flag_option() {
             _zerg_process_option "$parser_name" "$def_name" "$option_name" dummy_array dummy_index 0 0
             return $? ;;
         *)
-            tMsg 0 "_zerg_process_flag_option: Option $option_name cannot take arguments in bundle"
-            return 92 ;;
+            tMsg 0 "Option $option_name cannot take arguments in bundle"
+            return ZERR_BAD_OPTION ;;
     esac
 }
+
 
 ###############################################################################
 #
 zerg_parse() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<'EOF'
+    local quiet parse_v
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_parse parser_name [command_line_args...]
 Parse command line arguments using the specified parser.
 
-Options: None (but see options on zerg_new)
+Options: --quiet, --verbose (see also options on zerg_new)
 
 Example:
-  zerg_parse MYPARSER "$@"
+    zerg_parse MYPARSER "$@"
 EOF
-        return
-    fi
-    local parse_v=""
-    if [[ "$1" == "-v" ]]; then
-        parse_v=1; shift;
-    fi
+            return ;;
+        -q|--quiet) quiet=1 ;;
+        -v|--verbose) parse_v=1 ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
 
-    req_argc 1 99 $# || return 98
+    req_argc 1 99 $# || return ZERR_ARGC
     local parser_name="$1"
     shift
 
     # Verify parser exists
     if ! typeset -p "$parser_name" &>/dev/null; then
-        tMsg 0 "zerg_parse: Parser '$parser_name' does not exist"
-        return 98
+        [ $quiet ] || tMsg 0 "Parser '$parser_name' does not exist"
+        return ZERR_UNDEF
     elif [ parse_v ]; then
         echo "Parser is stored as:"
         typeset -p $parser_name
@@ -355,11 +351,11 @@ EOF
     fi
 
     # Get parser settings
-    local abbrev_enums=$(aa_get -q -d "1" "$parser_name" "__abbrev")
-    local abbrev_options=$(aa_get -q -d "1" "$parser_name" "__abbrev")
-    local case_ignore_enums=$(aa_get -q -d "1" "$parser_name" "__abbrev")
-    local case_ignore_options=$(aa_get -q -d "1" "$parser_name" "__ignore_case")
-    local var_style=$(aa_get -q -d "separate" "$parser_name" "__var_style")
+    local abbrev_enums=$(aa_get -q -d "1" "$parser_name" "abbrev_enums")
+    local abbrev_options=$(aa_get -q -d "1" "$parser_name" "allow_abbrev")
+    local ic_choices=$(aa_get -q -d "1" "$parser_name" "ic_choices")
+    local ignore_case=$(aa_get -q -d "1" "$parser_name" "ignore_case")
+    local var_style=$(aa_get -q -d "separate" "$parser_name" "var_style")
 
     local -a cmdline_args
     cmdline_args=("$@")
@@ -372,8 +368,8 @@ EOF
     local registered=$(aa_get -q "$parser_name" "arg_names_list")
     print ${${(P)parser_name}[arg_names_list]}
     if [[ -z "$registered" ]]; then
-        tMsg 0 "zerg_parse: No arguments registered in parser '$parser_name'"
-        return 95
+        [ $quiet ] || tMsg 0 "No arguments registered in parser '$parser_name'"
+        return ZERR_UNDEF
     fi
     local -a refnames
     refnames=(${=registered})
@@ -383,8 +379,8 @@ EOF
         local def_name="${parser_name}__${refname}"
 
         if ! typeset -p "$def_name" &>/dev/null; then
-            tMsg 0 "zerg_parse: Definition '$def_name' not found"
-            return 94
+            [ $quiet ] || tMsg 0 "Definition '$def_name' not found"
+            return ZERR_UNDEF
         fi
 
         # Get all aliases for this argument
@@ -440,7 +436,7 @@ EOF
 
     while [[ $i -le ${#cmdline_args} ]]; do
         local arg="${cmdline_args[i]}"
-
+        tMsg 0 "Parsing cmdline option '$arg'"
         case "$arg" in
             --*)
                 # Long option
@@ -452,30 +448,28 @@ EOF
                     matched_def="${long_options[$option_name]}"
                 elif [[ $abbrev -eq 1 ]]; then
                     # Try abbreviation matching
-                    aa_find_key -x '__*' long_options "$option_name" "$case_ignore_options"
+                    aa_find_key -x '__*' long_options "$option_name" "$ignore_case"
                     case $? in
                         1) matched_def="$_aa_matched_key" ;;
-                        0)
-                            tMsg 0 "zerg_parse: Unknown option: $option_name"
-                            return 91 ;;
-                        2)
-                            tMsg 0 "zerg_parse: Ambiguous option: $option_name"
-                            return 90 ;;
+                        0) tMsg 0 "Unknown option: '$option_name'.";
+                            tMSg 0 "    Known: $long_options."
+                            return ZERR_BAD_OPTION ;;
+                        2) tMsg 0 "Ambiguous option: $option_name";
+                            return ZERR_BAD_OPTION ;;
                     esac
                 else
-                    tMsg 0 "zerg_parse: Unknown option: $option_name"
-                    return 91
+                    tMsg 0 "Unknown option: $option_name"; return ZERR_BAD_OPTION
                 fi
 
                 # Process the matched option
-                if ! _zerg_process_option "$parser_name" "$matched_def" "$option_name" cmdline_args i $case_ignore_enums $abbrev_enums; then
+                if ! _zerg_process_option "$parser_name" "$matched_def" "$option_name" cmdline_args i $ic_choices $abbrev_enums; then
+                    # TODO ?
                     return 89
                 fi
 
                 # Mark as provided
                 local dest=$(aa_get -q "$matched_def" "dest")
-                [[ -n "$dest" ]] && provided_dests["$dest"]=1
-                ;;
+                [[ -n "$dest" ]] && provided_dests["$dest"]=1 ;;
             -*)
                 # Short option(s)
                 local opt_string="${arg#-}"
@@ -489,20 +483,20 @@ EOF
                     if [[ -n "${short_options[$short_opt]}" ]]; then
                         matched_def="${short_options[$short_opt]}"
                     else
-                        tMsg 0 "zerg_parse: Unknown option: $short_opt"
-                        return 91
+                        [ $quiet ] || tMsg 0 "Unknown option: $short_opt"
+                        return ZERR_BAD_OPTION
                     fi
 
                     # Check if this is the last option in the bundle
                     if [[ $j -eq ${#opt_string} ]]; then
                         # Last option - can take arguments
-                        if ! _zerg_process_option "$parser_name" "$matched_def" "$short_opt" cmdline_args i $case_ignore_enums $abbrev_enums; then
-                            return 88
+                        if ! _zerg_process_option "$parser_name" "$matched_def" "$short_opt" cmdline_args i $ic_choices $abbrev_enums; then
+                            return ZERR_BAD_OPTION
                         fi
                     else
                         # Middle options must be flags
                         if ! _zerg_process_flag_option "$parser_name" "$matched_def" "$short_opt"; then
-                            return 87
+                            return ZERR_BAD_OPTION
                         fi
                     fi
 
@@ -512,26 +506,22 @@ EOF
 
                     (( j++ ))
                 done ;;
-            *)
-                # Positional argument
-                break;
-                positional_args+=("$arg") ;;
+            *) positional_args+=("$arg") ;;
         esac
-
         (( i++ ))
     done
 
     # Check for missing required arguments
     for req_dest in "${required_dests[@]}"; do
         if [[ -z "${provided_dests[$req_dest]}" ]]; then
-            tMsg 0 "zerg_parse: Missing required argument: $req_dest"
-            return 86
+            [ $quiet ] || tMsg 0 "Missing required argument: $req_dest"
+            return ZERR_BAD_OPTION
         fi
     done
 
     # TODO: Handle positional arguments explicitly?
     if [[ ${#positional_args} -gt 0 ]]; then
-        tMsg 1 "zerg_parse: Positional arguments not yet supported: ${positional_args[*]}"
+        [ $quiet ] || tMsg 0 "Positional arguments not yet supported: ${positional_args[*]}"
     fi
 
     return 0
