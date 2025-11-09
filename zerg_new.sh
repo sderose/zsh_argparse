@@ -1,20 +1,70 @@
 #!/bin/zsh
 # Create a new argument parser
 
+_zerg_parser_init() {
+    # Check if already exists, and deal.
+    local priorType=`sv_type $parser_name`
+    if [[ $priorType == ^(scalar|integer|float|array)$ ]]; then
+        tMsg 0 "Cannot create zerg parser '$parser_name', variable already exists."
+        return ZERR_DUPLICATE
+    elif [[ $priorType == "assoc" ]]; then
+        local disp=$(aa_get "$parser_name" "on_redefine")
+        # TODO: When is option parsed???
+        if [[ $disp == allow ]] || [[ $disp == "" ]]; then
+            zerg_del "$parser_name"
+        elif [[ $disp == ignore ]]; then
+            return 0
+        elif [[ $disp == warn ]]; then
+            tMsg 0 "Warning: Parser '$parser_name' already exists."
+            zerg_del "$parser_name"
+        elif [[ $disp == error ]]; then
+            tMsg 0 "Error: Parser '$parser_name' already exists."
+            return ZERR_DUPLICATE
+        else
+            tMsg 0 "Unknown value '$disp' for --on-redefine."
+            return ZERR_ENUM
+        fi
+    fi
+
+    # Create hidden parser assoc with default options, etc.
+    typeset -ghA "$parser_name"
+
+    aa_set $parser_name "$ZERG_MAGIC_TYPE" "ZERG_PARSER"
+    aa_set $parser_name all_arg_names ""
+    aa_set $parser_name required_arg_names ""
+
+    aa_set $parser_name add_help ""
+    aa_set $parser_name allow_abbrev 1
+    aa_set $parser_name allow_abbrev_choices 1
+    aa_set $parser_name description ""
+    aa_set $parser_name description_paras ""
+    aa_set $parser_name epilog ""
+    aa_set $parser_name export 1
+    aa_set $parser_name help_file ""
+    aa_set $parser_name help_tool ""
+    aa_set $parser_name ignore_case 1
+    aa_set $parser_name ignore_case_choices 1
+    aa_set $parser_name ignore_hyphens ""
+    aa_set $parser_name on_redefine "allow"
+    aa_set $parser_name usage ""
+    aa_set $parser_name var_style "separate"
+}
+
 zerg_new() {
     local -A zerg_opts=(
         [add_help]="Automatically add a '--help -h' option"
         [allow_abbrev]="Allow abbreviated option names (default: on)"
-        [abbrev_enums]="Allow abbreviated enum values"
-        [description]="TEXT: Description for help text"
+        [allow_abbrev_choices]="Allow abbreviated choices values"
+        [description]="text: Description for help text"
         [description_paras]="Retain blank lines in 'description'"
-        [epilog]="TEXT: Show at end of help"
+        [epilog]="text: Show at end of help"
+        [export]="Export the assocs that store the parser and args."
         [help_file]="path: to help information"
         [help_tool]="name: of a renderer for help information"
         [ignore_case]="Enable case-insensitive option matching"
+        [ignore_case_choices]="Ignore case on choices values"
         [ignore_hyphens]="E.g. 'out-file' and 'outfile' are the same"
-        [ic_choices]="Ignore case on choices values"
-        [on_redefine]="[error|warn|allow|ignore]: What redefining parser or arg does "
+        [on_redefine]="What redefining parser or arg does (allow|error|warn|ignore)"
         [usage]="Show shorter help, mainly list of options"
         [var_style]="separate (default) | assoc: How to store results"
     )
@@ -47,108 +97,66 @@ EOF
     local parser_name="$1"
     shift
 
-    # Check if already exists, and deal.
-    if typeset -p "$parser_name" &>/dev/null; then
-        local disp=$(aa_get "$parser_name" "on_redefine")
-        # TODO: When is option parsed???
-        if [[ $disp == error ]]; then
-            tMsg 0 "zerg_new: Error: Parser '$parser_name' already exists."
-            return ZERR_DUPLICATE
-        elif [[ $disp == ignore ]]; then
-            return 0
-        elif [[ $disp == warn ]]; then
-            tMsg 0 "zerg_new: Warning: Parser '$parser_name' already exists."
-            zerg_del "$parser_name"
-        elif [[ $disp == allow ]]; then
-            zerg_del "$parser_name"
-        else
-            tMsg 0 "new: For --on-redefine: Unknown value '$disp'."
-            return ZERR_ENUM
-        fi
-    fi
-
-    # Create hidden parser registry assoc with defaults
-    #setopt xtrace
-    echo "pname '$parser_name'"
-    typeset -ghA "$parser_name"
-    aa_set $parser_name add_help ""
-    aa_set $parser_name allow_abbrev 1
-    aa_set $parser_name abbrev_enums 1
-    aa_set $parser_name description ""
-    aa_set $parser_name description_paras ""
-    aa_set $parser_name epilog ""
-    aa_set $parser_name help_file ""
-    aa_set $parser_name help_tool ""
-    aa_set $parser_name ignore_case 1
-    aa_set $parser_name ignore_hyphens ""
-    aa_set $parser_name ic_choices ""
-    aa_set $parser_name on_redefine "error"
-    aa_set $parser_name usage ""
-    aa_set $parser_name var_style "separate"
-    aa_set $parser_name arg_names ""
+    echo "Creating parser '$parser_name'"
+    _zerg_parser_init $parser_name || return $?
 
     # Parse options
     while [[ "$1" == -* ]]; do case "$1" in
-            --allow-abbrev|--abbrev-options)
-                aa_set "$parser_name" "allow_abbrev" "1"
-                shift ;;
-            --no-allow-abbrev|--no-abbrev-options)
-                aa_set "$parser_name" "allow_abbrev" ""
-                shift ;;
-            --abbrev-enums )
-                aa_set "$parser_name" "enum_abbrev" "1"
-                shift ;;
-            --no-abbrev-enums )
-                aa_set "$parser_name" "enum_abbrev" ""
-                shift ;;
+            --allow-abbrev|--abbrev)
+                aa_set "$parser_name" "allow_abbrev" 1 ;;
+            --no-allow-abbrev|--no-abbrev)
+                aa_set "$parser_name" "allow_abbrev" "" ;;
+            --allow-abbrev-choices|--abbrevc)
+                aa_set "$parser_name" "allow_abbrev_choices" 1 ;;
+            --no-allow-abbrev-choices|--no-abbrevc)
+                aa_set "$parser_name" "allow_abbrev_choices" "" ;;
             --description)
-                aa_set "$parser_name" "description" "$2"
-                shift 2 ;;
-            --description-paras)
-                aa_set "$parser_name" "description_paras" 1
-                shift ;;
+                aa_set "$parser_name" "description" "$2" ; shift ;;
+            --description-paras|--dparas)
+                aa_set "$parser_name" "description_paras" 1 ;;
             --epilog)
-                aa_set "$parser_name" "epilog" "$2"
-                shift 2 ;;
+                aa_set "$parser_name" "epilog" "$2"; shift ;;
+            --export|-x)
+                aa_set "$parser_name" "export" 1; shift ;;
+            --no-export|--nx)
+                aa_set "$parser_name" "export" ""; shift ;;
             --help-file)
-                aa_set "$parser_name" "help_file" "$2"
-                shift 2 ;;
+                aa_set "$parser_name" "help_file" "$2"; shift ;;
             --help-tool)
-                aa_set "$parser_name" "help_tool" "$2"
-                shift 2 ;;
-            --ignore-case-enums)
-                aa_set "$parser_name" "ignore_case_enums" "1"
-                shift ;;
-            --no-ignore-case-enums)
-                aa_set "$parser_name" "ignore_case" ""
-                shift ;;
-            --ignore-case-options|--ignore-case|-i)
-                aa_set "$parser_name" "ignore_case" "1"
-                shift ;;
-            --no-ignore-case-options|--no-ignore-case)
-                aa_set "$parser_name" "ignore_case_enums" ""
-                shift ;;
-            --ignore-hyphens)
-                aa_set "$parser_name" "ignore_hyphens" "1"
-                tMsg 0 "--ignore-hyphens is unfinished."
-                shift ;;
-            --on-redefine)
-                aa_set "$parser_name" "on_redefine" "$2"
-                shift 2;;
+                aa_set "$parser_name" "help_tool" "$2"; shift ;;
+            --ignore-case-choices|--icc)
+                aa_set "$parser_name" "ignore_case_choices" 1 ;;
+            --no-ignore-case-choices|--no-icc|--nicc)
+                aa_set "$parser_name" "ignore_case_choices" "" ;;
+            --ignore-case-options|--ignore-case|--ic|-i)
+                aa_set "$parser_name" "ignore_case" 1 ;;
+            --no-ignore-case-options|--no-ignore-case|--no-ic|--nic)
+                aa_set "$parser_name" "ignore_case_choices" "" ;;
+            --ignore-hyphens|--ih)
+                aa_set "$parser_name" "ignore_hyphens" 1
+                tMsg 0 "--ignore-hyphens is unfinished." ;;
+            --no-ignore-hyphens|--no-ih|--nih)
+                aa_set "$parser_name" "ignore_hyphens" "" ;;
+            --on-redefine|--redef)
+                aa_set "$parser_name" "on_redefine" "$2"; shift ;;
             --usage)
-                aa_set "$parser_name" "usage" ""
-                shift ;;
-            --var-style)
+                aa_set "$parser_name" "usage" "" ;;
+            --var-style|--vars)
                 if [[ "$2" != "separate" && "$2" != "assoc" ]]; then
-                    tMsg 0 "zerg_new: --var-style must be 'separate' or 'assoc'"
+                    tMsg 0 "--var-style must be 'separate' or 'assoc'"
                     return ZERR_ENUM
                 fi
                 aa_set "$parser_name" "var_style" "$2"
-                shift 2 ;;
+                shift ;;
             *)
-                tMsg 0 "zerg_new: Unknown option: $1"; return ZERR_BAD_OPTION ;;
+                tMsg 0 "Unknown option: $1"; return ZERR_BAD_OPTION ;;
         esac
+        shift
     done
+
+    if ! [ `aa_get -q "$parser_name" "export"` ]; then
+        export -n $parser_name
+    fi
     return 0
 }
 
@@ -187,7 +195,7 @@ EOF
     done
 
     req_sv_type assoc "$1" || return ZERR_SV_TYPE
-    aa_export -f view $1
+    aa_export -f view "$1"
     local args=$(aa_get "$1" "$art_names_list")
     for arg in ${(zO)args}; do
         aa_export -f view $arg
@@ -195,12 +203,13 @@ EOF
 }
 
 zerg_to_argparse() {
+    local sp="            "
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_to_argparse parserName
 Writes out a zerg parser as roughly equivalent Python argparse calls.
 A few things don't quite transfer -- for example, zerg has quite a few more
-types, and at least one more action.
+types, at least one more action, and added parser options.
 TODO: Aliases are not yet included -- just the reference name.
 TODO: flag options (no value tokens following)
 EOF
@@ -211,45 +220,66 @@ EOF
     done
 
     req_sv_type assoc "$1" || return ZERR_SV_TYPE
-    print "    def processOptions() -> argparse.Namespace:\n"
-    print "        parser = argparse.ArgumentParser(\n"
+    local parser_name="$1"
 
-    for po in ignore_case allow_abbrev var_style description usage epilog; do
+    local -A notpython=(
+        [allow_abbrev_choices]=1 [description_paras]=1 [export]=1
+        [help_file]=1 [help_tool]=1 [ignore_case]=1 [ignore_case_choices]=1
+        [ignore_hyphens]=1 [on_redefine]=1 [var_style]=1 )
+    print "    def processOptions() -> argparse.Namespace:"
+    print "        parser = argparse.ArgumentParser("
+    for po in ignore_case allow_abbrev description usage epilog; do
+        #[ "$notpython[$arg]" ] && continue
         local poval=$(aa_get "$1" "$po")
-        print "            $po='$poval',"
+        is_float -q $poval || poval="\"$poval\""
+        print "$sp$po=$poval,"
     done
     print "        )"
 
-    # Keep a list of what options we've written, so aliases don't cause dups
-    local -A defname2optnames=()
+    # Collect an assoc of argdefname->optnames
+    local -A def_map
+    for arg in ${(pk)parser_name}; do
+        [[ $arg == -* ]] || continue
+        local def_name=`aa_get $parser_name "$arg"
+        local opt_names=`aa_get $def_name "arg_names"
+        def_map[$def_name]="$opt_names"
+    done
+    typeset -p def_map | sed 's/\[/\n  [/g'
 
-    local cutLen=(( $#1 + 3 ))
-    for arg in ${(zO)1[@]}; do
-        [ $arg == -* ] || continue
-        local argdefname=${${(P)1}[$arg]}
-        [ $defname2optnames[$argdefname] ] && continue
-        $defname2optnames[$argdefname]=1
-
-        sv_type $argdefname assoc || tMsg 0 "Bad storage for argdef '$argdefname'."
-        local arg_names=`aa_get $arg "arg_names"`
-        local arg_names_as_params=$arg_names:s/ /\", \"/
-        local buf="            parser.add_argument(\"$arg_names_as_params\""
-        for ao in ${(x)zerg_argdef_fields}; do
-            [ $ao == arg_names ] && continue
-            local val=$(aa_get "$arg" "$ao")
-            [ "$val" ] || continue
-            is_int "$val" || val="'$val'"
-            local item=" $ao=$val"
-            resultLen=(($#buf + $#item))
-            if [[ resultLen > 79 ]]; then
-                print "$buf,"
-                buf="           $item"
-            else
-                buf+=", $item"
-            fi
-        done
-        print "$buf\n            )\n"
+    for def_name in ${(ko)def_map}; do
+        if ! [[ `sv_type $def_name` == assoc ]]; then
+            tMsg 0 "Bad storage for argdef '$def_name'."
+        else
+            local add_buf=`zerg_arg_to_add_argument $def_name "$def_map[$def_name]"`
+            print add_buf
+        fi
     done
 
     print "\n        return parser.parse_args()"
+}
+
+zerg_arg_to_add_argument() {
+    local def_name="$1"
+    local -a ref_names=${=2}
+    local ref_name=$ref_names[1]
+    local sp="            "
+    local buf="${sp}parser.add_argument("
+    for name in $ref_names; do
+        buf+="\"$name\""
+    done
+
+    for ao in type action default choices const dest nargs required help; do
+        local val=$(aa_get "$def_name" "$ao")
+        [ "$val" ] || continue
+        is_float "$val" || val="\"$val\""
+        local item="$ao=$val"
+        resultLen=(($#buf + $#item + 2))
+        if [[ resultLen > 79 ]]; then
+            print "$buf,"
+            buf="$sp$item"
+        else
+            buf+=", $item"
+        fi
+    done
+    print "$buf\n       )"
 }

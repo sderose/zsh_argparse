@@ -7,24 +7,26 @@
 # Test and messaging support
 #
 # Error return codes
-ZERR_NOT_YET=999
-ZERR_TEST_FAIL=998
-ZERR_EVAL_FAIL=99
-ZERR_ARGC=98
-ZERR_SV_TYPE=97
-ZERR_ZERG_TVALUE=96
-ZERR_BAD_OPTION=95
-ZERR_ENUM=94
-ZERR_NO_KEY=93
-ZERR_NO_INDEX=92
-ZERR_UNDEF=91
-ZERR_BAD_NAME=90
-ZERR_DUPLICATE=89
+typeset -gHi ZERR_NOT_YET=999
+typeset -gHi ZERR_TEST_FAIL=998
+typeset -gHi ZERR_EVAL_FAIL=99
+typeset -gHi ZERR_ARGC=98
+typeset -gHi ZERR_SV_TYPE=97
+typeset -gHi ZERR_ZERG_TVALUE=96
+typeset -gHi ZERR_BAD_OPTION=95
+typeset -gHi ZERR_ENUM=94
+typeset -gHi ZERR_NO_KEY=93
+typeset -gHi ZERR_NO_INDEX=92
+typeset -gHi ZERR_UNDEF=91
+typeset -gHi ZERR_BAD_NAME=90
+typeset -gHi ZERR_DUPLICATE=89
 
-[ "$HELP_OPTION_EXPR" ] || export HELP_OPTION_EXPR="(-|--)(h|he|hel|help)"
+typeset -gH ZERG_MAGIC_TYPE="\uEDDA.TYPE"  #
+
+[ "$HELP_OPTION_EXPR" ] || typeset -gHi HELP_OPTION_EXPR="(-|--)(h|he|hel|help)"
 
 # Message levels
-export ZERG_V="" ZERG_TR=3
+typeset -gHi ZERG_V="" ZERG_TR=3
 [[ "$1" == "-v" ]] && ZERG_V=1
 
 # Centralized messaging/tracing, by verbosity level
@@ -34,7 +36,7 @@ tMsg() {
     [[ $ZERG_V -lt $level ]] && return
     local ftrace="" i=0
     for (( i=1; i<=$ZERG_TR; i++ )); do
-        ftrace+=" \< $functrace[$i]"
+        ftrace+=" $functrace[$i] \<"
     done
     print "$ftrace: $*" >&2
 }
@@ -106,10 +108,12 @@ otherwise print a message with the caller name, string, and type.
 Options:
     -q|--quiet: Suppress messages.
     -i|--ignore-case: Disregard case distinctions.
+    -- Mark end of options
 EOF
             return ;;
-        -q|--quiet) quiet=1 ;;
+        -q|--quiet) quiet='-q';;
         -i|--ignore-case) ic=1 ;;
+        --) break ;;
         *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
       esac
       shift
@@ -121,33 +125,6 @@ EOF
     fi
 }
 
-req_aa_has() {
-    local quiet
-    while [[ "$1" == -* ]]; do case "$1" in
-        (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage:
-    req_aa_has assocname key
-    req_aa_has zerg_types \$4 || return ZERR_ENUM
-
-Check whether the named shell associative array has an entry with the
-key (without case-folding or abbreviation). Return 0 iff so;
-otherwise print a message with the caller varname, and failed key.
-
-To do: Rename or alias 'contains'?
-EOF
-            return ;;
-        -q|--quiet) quiet=1 ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
-      esac
-      shift
-    done
-
-    if ! aa_has $1 "$2"; then
-        [ $quiet ] || tMsg 0 "Assoc '$1' does not have key $2."
-        return ZERR_NO_KEY
-    fi
-}
-
 req_argc() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in
@@ -156,13 +133,13 @@ Usage:
     req_argc [-q] minArgs maxArgs value
     req_argc 2 2 $# || return ZERR_ARGC
 
-Check whether the value passed in between min and max inclusive.
+Check whether the value passed in is between min and max inclusive.
 Typically, a caller would use "$#" as the value, making the test be that
 the caller's argument list is of appropriate length. Return 0 if correct,
 otherwise print a message with the caller name, and the 3 arguments.
 EOF
             return ;;
-        -q|--quiet) quiet=1 ;;
+        -q|--quiet) quiet='-q';;
         *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
       esac
       shift
@@ -172,7 +149,6 @@ EOF
         [ $quiet ] || tMsg 0 "req_argc expected 3 args, but got $#."
         return ZERR_ARGC
     fi
-
     if [[ $3 -lt "$1" ]] || [[ $3 -gt "$2" ]]; then
         [ $quiet ] || tMsg 0 "Expected from $1 to $2 arg(s), but got $3."
         return ZERR_ARGC
@@ -200,7 +176,7 @@ Note: These are not the same as the type names that can be passed to
     defined in bootstrap_defs.sh, and validated by functions in parse_args.sh.
 EOF
             return ;;
-        -q|--quiet) quiet=1 ;;
+        -q|--quiet) quiet='-q';;
         *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
       esac
       shift
@@ -225,7 +201,7 @@ sv_quote() {
 Usage: sv_quote varname
 Echo the value of the named shell variable, escaped and quoted.
 * undefined variable
-    A message is display and RC is 1.
+    A message is displayed and RC is 1.
 * integer and float variable, or string that passes is_int or is_float.
     No quotes added.
 * array
@@ -243,7 +219,7 @@ See also:  ${(q)name} (and qq, qqq, and qqqq); sv_tostring
 TODO: Add like Python csv QUOTE_NONNUMERIC, MINIMAL, ALL, NONE?
 EOF
             return ;;
-        -q|--quiet) quiet=1 ;;
+        -q|--quiet) quiet='-q';;
         *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
       esac
       shift
@@ -289,7 +265,7 @@ Echo the value of the named shell variable, in the form that can be used
 See also: sv_quote; typeset -p
 EOF
             return ;;
-        -q|--quiet) quiet=1 ;;
+        -q|--quiet) quiet='-q';;
         *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
       esac
       shift
@@ -323,11 +299,13 @@ Options:
     -f python: dquotes, backslashes, \n\r\t
     -f zsh: Use ${(q)}
     -f url: Various characters to UTF-8 and %xx encoding
+    -- Mark end of options (say, if string to escape may start with "-")
 See also: sv_quote; sv_tostring; sv_export
 EOF
             return ;;
         -q|--quiet) quiet=1;;
         -f|--format) shift; format=$1 ;;
+        --) break ;;
         *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
       esac
       shift
@@ -376,6 +354,27 @@ EOF
         [ $quiet ] || tMsg 0 "str_escape: Unknown format '$format'"
         return ZERR_ENUM
     fi
+}
+
+
+###############################################################################
+#
+zerg_opt_to_var() {
+    if [[ "$1" == "-h" ]]; then
+        cat <<'EOF'
+Usage zerg_opt_to_var [string]
+    Remove leading hyphens, and turn any others to underscores.
+    Then make sure the result is a legit variable name (is_ident)
+EOF
+        return
+    fi
+    local x=${${1#-}#-}
+    x="$x:gs/-/_/"
+    if ! is_ident "$x"; then
+        tMsg 0 "Invalid identifier '$x' (original: '$1')."
+        return ZERR_BAD_NAME
+    fi
+    echo $x
 }
 
 

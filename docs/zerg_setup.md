@@ -1,103 +1,89 @@
 ==Information on [zerg_setup.sh]==
 
-zerg_setup
-There are types for integers in particular bases,
-floats that must be valid probabilities or log probabilities;
-strings with various constraints such as being single tokens, urls, etc.;
-dates and times; and so on:
+zerg_setup provides some general functions needed by other parts of the
+zerg library. It also defines several named return codes and their values.
 
-===Integers===
-* `anyint`: Any of `int`, `hexint`, `octint`, or `binint`
-* `binint`: A binary integer, like 0b00001111
-* `hexint`: A hexdecimal integer, like 0xBEEF
-* `int`: A decimal integer, such as 99 or -1. Leading zeros are permitted,
-unlike with `octint`, where that's how it chooses octal vs. decimal.
-* `octint`: An octal integer with a leading zero, like 0777.
-The leading zero is required in hope of being less visualluy confusing.
+===Trace and message support===
 
-===Non-integer numbers===
-* `float`: A non-integer such as -3.14 or 6.0223E+23.
-* `prob`: A probability value (from 0 to 1, inclusive)
-* `logprob`: A log of a probability (from -1 to 0, inclusive)
-* [`tensor`] is an expected addition, parameterized by a numpy-like "shape" such as
-    --type tensor(2,3)
-* [`complex`]: Using syntax like -1.1+1.0i
+tMsg [n] [message] -- display the message to stderr if the message level (stored
+in $ZERG_V) is at least as high as n. Also, it fills in a partial
+traceback at the start of the message, for as many levels as $ZERG_TR.
 
-The values in the tensor are (for the moment) taken to be floats.
-The value is a single shell argument, but in fairly free
-form, such as any of these:
-    --mat '[ [ 1 2 3], [ 4, 5, 6 ] ]'
-    --mat '1 2 3; 4 5 6'
-    --mat '1 2 3 4 5 6'
-    --mat 1,2,3,4,5,6
+tHead [message] -- display the message to stderr, with a blank line above
+and a loud marker at the start.
 
-===Booleans===
-* `bool`: This accepts an explicit Boolean value following the option name as
-the command line is parsed. It is more common to use the actions `store_true`
-and `store_false` (and here, `toggle`) and options that require no following
-value token.
+===General functions on shell variables ===
 
-The `is_bool` checker rejects any other values than:
-    1|true|yes|on|y
-    0|false|no|off|n|""
+sv_type [varname] -- echo the zsh datatype of the named shell variable,
+as one of: undef, scalar, integer, float, array, assoc.
+See also:  ${(t)name} or ${(tP)name}, which return a hyphen-separated list of
+properties of a given variable. Typical use:
+    if [[ `sv_type path` == "undef" ]]; then...
 
-===Strings===
-* `char`: A single Unicode character.
-TODO: Do modifiers count?
-* `str`: Any string.
-* `ident`: A series of one or more ASCII "word" characters (alphanumerics and _),
-starting with a non-digit.
-* [uident]: A Unicode `ident`, defined the same as XML's "NMtoken" type.
-* `idents`: A series of one or more whitespace-separated `ident`s.
-* [`uidents`]: A series of one or more whitespace-separated `UIDENT`s.
-* `path`: A *nix syntax path. This is pretty forgiving, so you can have .., ~,
-paths to directories or files, existing or not, writable or not, etc.
-* `url`: Any url. The checking is pretty loose.
-* `regex`: A regular expression per se (this is not for ensuring that the
-value matches a particular regex; forthat see the `pattern` option to `add_argument`).
+sv_quote [varname] --
+echo the value of the named shell variable, escaped and quoted. Quoting
+depends on the type
 
-    ** TODO: Exactly which version? Should there be types for glob, basic, and PCRE?
+* undefined variable:
+A message is displayed and RC is 1.
 
-===Dates and times===
+* integer and float variable, or string that passes is_int or is_float:
+No quotes added.
 
-* `time`: An ISO 8601 standard time such as ("Z" and "-5:00" indicate time zones):
+* array:
+Treat each member separately, quoting all strings (including ''),
+but not numerics, and separating them by single spaces.
+Parentheses are not added.
 
-```
-    12:01:59
-    12:01:59Z
-    23:59:59-5:00
-```
+* associative array:
+Like zsh, extract just the values (not the keys), in undefined order,
+and treat them like an array (see above).
 
-* `date`: ISO 8601 standard date such as `2025-12-31`
+* scalar/string:
+Put it in single quotes (unless it's a single token).
+Backslash any internal single quotes and backslashes.
 
-* `datetime`: ISO 8601 standard date and/or time, such as
-`2025-10-19T00:00:00.000-5:00`.
-The ISO 8601 formats are accepted by most software, and have the advantage
-of easy sorting.
+This uses zsh ${(qq)...}; zsh has ${(q)name} (and qq, qqq, and qqqq).
 
-* [epoch]: A *nix-style "epoch" time (number of seconds since the start of 1970).
-This is really just an int (usually positive, but no reason it has to be). The
-special datatype is just there so you can be semantically clearer.
 
-* [duration]: An amount of time rather than a postion in time. This can
-either be a raw number of seconds (such as the difference between 2 epoch times),
-or the ISO 8601 format (which begins with "P" for "period"):
+sv_tostring [varname] -- this is essentially the same as `typeset -p [varname]`.
 
-```
-    P[n]Y[n]M[n]DT[n]H[n]M[n]S
-```
+str_escape [-f formatname] string
+Escape the string as needed for the given format (default: html).
+Options:
+    -q | --quiet: Suppress error messages
+    -f html: < to &lt;, & to &amp;, " to &quot;, and ]]> to ]]&gt;.
+        This should suffice in content and in attribute values.
+    -f xml: same as --html
+    -f json: dquotes, backslashes, \n\r\t
+    -f python: dquotes, backslashes, \n\r\t
+    -f zsh: Use ${(q)}
+    -f url: Various characters to UTF-8 and %xx encoding
+    -- Mark end of options (say, if string to escape may start with "-")
 
-The usual truncations, such as "2025-09", are supported.
 
-Time+precision is not (yet) supported, such as ISO 8601 defines:
+===The "req_" tests===
 
-```
-    [time]±[hh]:[mm]:[ss].[sss]
-    [time]±[n]H[n]M[n]S
-```
+Several functions beginning "req_" are used to test a condition, and
+return whether it was satisfied (rc 0) or not (rc non-zero). They also
+print a message unless given the `-q` option.
 
-===Enums===
+These are used throughout zerg as a short, uniform way to test argument and
+other constraints, typically like:
 
-I expect to add `--choices "c1 c2 c3..."`, for values which are `uident`s.
-I think they'll regard or ignore case in accord with how option names do,
-or have a separate option of their own.
+    req_argc 1 2 $# || return ZERR_ARGC
+    req_sv_type assoc "$1" || return ZERR_SV_TYPE
+
+req_sv_type [type] [varname] -- test whether the named shell variable is
+of the given type (one of undef, scalar, integer, float, array, or assoc).
+
+req_zerg_type [type] [value] -- test whether the given value (the second
+argument is *not* a variable name like for `req_sv_type`), is a string
+that satisfies the given zerg type (see `zerg_types.sh` and `zerg_types.md`).
+
+req_aa_has [varname] [key] -- test whether the named variable (which must
+be an associative array) contains the given key.
+
+req_argc [min] [max] [have] -- normally used to test whether the number of
+arguments to a shell function (typically passed as the [have] parameter
+via "$#"), is at least min and at most max.

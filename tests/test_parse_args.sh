@@ -25,25 +25,29 @@ if [[ `sv_type PARSER` != "undef" ]]; then
 fi
 
 tHead "Testing zerg_new"
-zerg_new PARSER --ignore-case
+zerg_new PARSER --ignore-case --ignore-case-choices --description "descr text" --allow-abbrev --allow-abbrev-choices --epilog "Nevermore."
 [ $TEST_V ] && typeset -p PARSER
 
 tHead "Testing adds"
-zerg_add PARSER "notgood" --action store_true --help "Fail."
-[ $TEST_V ] && typeset -p PARSER__quiet
-
 zerg_add PARSER "--quiet" --action store_true --help "Less chatty."
-[ $TEST_V ] && typeset -p PARSER__quiet
+[ $? ] || tMsg 0 "zerg_add for PARSER --quiet failed."
+[ $TEST_V ] && echo "Quiet opt def: " && typeset -p PARSER__quiet
+
 zerg_add PARSER "--verbose -v" --action count --help "More chatty."
 [ $TEST_V ] && typeset -p PARSER__verbose
-zerg_add PARSER "-i" --action store_true --dest no_case --help "More chatty."
+zerg_add PARSER "-i" --action store_true --dest no_case --help "Disregard case distinctions."
 [ $TEST_V ] && typeset -p PARSER__no_case
+
+zerg_add -q PARSER "notgood" --action store_true --help "Bad name, add should fail."
+[ $TEST_V ] && typeset -p PARSER__quiet
 
 
 tHead "Testing parse"
 zerg_parse PARSER --verbose --nomac --maxchar 65535  -q -v hello.txt file2.txt
 
-echo "Got: quiet $quiet, verbose $verbose, nomac $nomac, maxchar $maxchar."
+aa_export -f view --sort PARSER
+
+#echo "Got: quiet $quiet, verbose $verbose, nomac $nomac, maxchar $maxchar."
 
 tHead "Testing zerg_to_argparse"
 zerg_to_argparse PARSER
@@ -187,7 +191,6 @@ fi
 
 ### Parsing
 tHead "Testing parse"
-zerg_parse -v PARSER -q -v --verbose --nomac --maxchar 65535 hello.txt
+zerg_parse -v PARSER -quiet -v --nomac --maxchar 65535 hello.txt
 
 echo "Got: quiet $quiet, verbose $verbose, nomac $nomac, maxchar $maxchar."
-#echo "Total fails: $FAILCT."

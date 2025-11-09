@@ -1,10 +1,10 @@
 ==Help on [zerg_new.sh]==
 
-Use this to create a new zsh argument parser, giving it a name.
+Use `zerg_new` to create a new zsh argument parser, giving it a name.
 
-Once you have created your new parser,
-add your arguments using `zerg_add`, and then actually parse your shell
-functions arguments with zerg_parse (see help on those for more details):
+Once you have created your new zerg parser,
+add argument definitions using `zerg_add`, and then parse your shell
+function's actually arguments with `zerg_parse` (see help on those for more details):
 
 ```
     myfunc() {
@@ -18,7 +18,10 @@ functions arguments with zerg_parse (see help on those for more details):
     }
 ```
 
-If desired, you can dispose of them afterward (or see "Re-use" below).
+`zerg` works a lot like Python's `argparse` so if you know either then
+learning the other should be pretty easy. But zerg is all zsh.
+
+If desired, you can dispose of the parser afterward (or see "Re-use" below).
 At the moment, re-creating a parser you've already created is an error,
 so you may want to delete or test before creating. However, this is expected
 to change so that you can just re-use what's there unless you specify
@@ -36,24 +39,60 @@ If multiple names are given, the first
 is the "reference name", and the others are considered aliases for it.
 
 There are several options you can use on `zerg_new` which apply to the
-parser as a whole:
+parser as a whole. One marked "(and negative)" below can be turned
+off instead of on, by prefixing the name with `no-`. For example,
+`--no-ignore-case`.
 
-* --add-help            Automatically add a "--help -h" option
-* --allow-abbrev        Allow abbreviated option names (default: on)
-* --description TEXT    Description for help text
-* --description-paras   Retain blank lines in `description`.
-* --epilog TEXT         Show at end of help
-* --help-file path      Path to help information
-* --help-tool name      Name of a renderer for help information
-* --ignore-case         Enable case-insensitive option matching
-* --ic-choices          Ignore case on --choices values
-* --on-redefine         Treat redefinitions in the specified way:
+* --add-help
+Automatically add a "--help -h" option
+
+* --allow-abbrev OR --abbrev (and negative)
+
+Allow abbreviated option names (default: on)
+
+* --allow-abbrev-choices OR --abbrevc (and negative)
+Allow abbreviated values for --choices (default: on)
+
+* --description [text]
+Description for help text
+
+* --description-paras OR --dparas
+Retain blank lines in `description`.
+
+* --epilog [text]
+Show at end of help
+
+* --help-file [path]
+Path to a help information file.
+
+* --help-tool [name]
+Name of a renderer executable for help information (default: $PAGER)
+
+* --ignore-case OR --ic (and negative)
+Enable case-insensitive option matching
+
+* --ignore-case-choices OR --icc (and negative)
+Ignore case on --choices values.
+
+* --ignore-hyphens OR --ih (and negative)
+Ignore internal hyphens in option names
+
+* --on-redefine OR --redef [what]
+Treat redefinitions in the specified way:
+
     * allow (the default): Quietly overwrite any old definition
-    * ignore: keep the old definition
-    * error: Issue a message and stop
+    * ignore: Keep the old definition
     * warn: Issue a warning and overwrite any old definition
-* --usage               Show shorter help, mainly list of options
-* --var-style STYLE     How to store results: `separate` (default) or `assoc`.
+    * error: Issue a message and stop
+
+If the parser name given is already defined, but it not a zerg parser,
+that is always an error (so zerg doesn't overwrite stuff it doesn't own).
+
+* --usage [text]
+Show shorter help, mainly list of options
+
+* --var-style [how]
+How to store results: `separate` (default) or `assoc`.
 With `separate`, they are stored as global variables named the same as the
 reference names. With `assoc`, they're put in a global associative array
 named `ZERGS`, keyed by those names. They are global because they have to
@@ -64,6 +103,16 @@ be visible to the shell function that called zerg functions.
 
 The parser "object" is created as a zsh associative array with
 the given name, such as MYPARSER in the example above.
+See [README.md] for a list of what's stored in there. In brief, it
+includes:
+
+* each parser option (without leading hyphens, like `ignore-case-choices]=1`);
+
+* each added argument name and alias (with hyphens included,
+like `[--quiet]=PARSER__quiet` and `[-q]=PARSER__quiet`); and
+
+* a list of all added argument names and aliases (space-separated,
+like [all_arg_names]=" --quiet -q --verbose -v...").
 
 Each added option definition is stored as another
 associative array. Its name consists of the parser name, plus 2 underscores,
@@ -151,16 +200,24 @@ to match ones from Python's csv library
 
 * ZERG__delimiter (this should perhaps allow the reserved value "SPACES"
 to handle the `awk` default behavior)
+
 * ZERG__double-quote (escape quote-chars by using 2 adjacent quote-chars)
+
 * ZERG__escape-char (commonly backslash)
+
 * ZERG__line-terminator (\n, \r, \r\n; I think this should also accept
 the mnemonics U, M, and D for applicable OS's, respectively)
+
 * ZERG__quote-char (which should accept either a single character, or
 an open/close pair)
+
 * ZERG__quoting (which fields to quote on output; this should accept at least
 NONE, ALL, MINIMAL, NONNUMERIC.
+
 * ZERG__skip-initial-space
+
 * ZERG__multi-delim (not in Python CSV, but indicates that multiple
 adjacent delimiters should count as just one).
+
 * ZERG__header_record (not in Python CSV, but indicates that the first
 record should be a header with field names.

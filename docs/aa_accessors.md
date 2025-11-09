@@ -1,40 +1,38 @@
 [aa_accessors.sh]
 
 This file provides shell functions to help manage zsh associative arrays
-when the array name is itself in a variable. This is possible in zsh without
+when the assoc name is itself in a variable. This is possible in zsh without
 these convenience functions, for example getting the value with ${(P)name}.
 But not all operations are easy, some seem to require eval, and the
 syntax required may not be the easiest to remember or predict. Therefore,
 these functions, which largely mirror the methods on Python dicts:
 
-* aa_set [varname] [membername] [value]
+* aa_set [varname] [key] [value]
 
-Sets the given member to the given value, in the associated array
+Sets item with the given key to the given value, in the associated array
 named by `varname`.
 
-* aa_get [-d default] [varname] [membername]
+* aa_get [-d default] [varname] [key]
 
-Retrieves the given member and echoes it to stdout. If the key is not
+Retrieves the given key and echoes it to stdout. If the key is not
 present in the associative array, but a default value is supplied via `-d`,
 the default value is returned. See also `aa_get_abbrev`.
 
-* aa_has [varname] [membername]
+* aa_has [varname] [key]
 
-Returns code 0 if the member is in the associative array, else 1.
+Returns code 0 if the key is in the associative array, else 1.
 
 * aa_keys [varname]
 
 Writes a space-separated list of keys to stdout.
-TODO: Need to adding quoting for values that aren't single tokens.
 
 * aa_values [varname]
 
 Writes a space-separated list of values to stdout.
-TODO: Need to adding quoting for values that aren't single tokens.
 
-* aa_unset [varname] [membername]
+* aa_unset [varname] [key]
 
-Removes the given member via `unset`.
+Removes the item with the given via `unset`.
 
 * aa_init [varname]
 
@@ -65,25 +63,25 @@ the default value is returned. On failure such as an ambiguous key or a key
 that is not found and there is not default,
 an error message goes to stderr.
 
-* aa_copy source_array target_array
+* aa_copy source_assoc target_assoc
 
-Make `target_array` be an exact copy of `source_array`. `target_array` is created
+Make `target_assoc` be an exact copy of `source_assoc`. `target_assoc` is created
 or cleared if needed.
 
-* aa_update target_array source_array
+* aa_update target_assoc source_assoc
 
-Copy values from the `source_array` to the `target_array`, whether they are
-already there or not. Leave other members of `target_array` unchanged
+Copy values from the `source_assoc` to the `target_assoc`, whether they are
+already there or not. Leave other items of `target_assoc` unchanged.
 
-* aa_setdefault [varname] [membername] [dftvalue]
+* aa_setdefault [varname] [key] [dftvalue]
 
-Like `aa_set`, but only acts if the specified member does not already exist.
+Like `aa_set`, but only acts if the specified item does not already exist.
 If it already exists it is left unchanged.
 
 * aa_equals [varname1] [varname1]
 
 Test whether the two associative arrays are equal. At least for now, this
-test for exact equality; so if one array has an abbreviated key that they
+test for exact equality; so if one assoc has an abbreviated key that they
 other doesn't abbreviate the same, they don't match.
 
 * aa_export -f [formatname] [varname]

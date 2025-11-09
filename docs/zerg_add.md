@@ -265,13 +265,9 @@ leading hyphens) is used.
 ==add_argument --fold [lower|upper|none]==
 
 Whether to convert the value to uniform case before storing.
-Not to be confused with the zerg *parser* options --ignore-case
-and --ignore-case-enums, which control how option names themselves
-and the value of `choices` arguments, are matched.
-
-TODO: Update code and doc to support this.
-
-TODO: Consider Unicode normalization and whitespace normalization, too.
+Not to be confused with the zerg *parser* options `--ignore-case`
+(which control how option names themselves are matched)
+and and `--ignore-case-choices` (which does the same for the values of `choices` arguments).
 
 ==add_argument --format [pct-string]==
 
@@ -284,31 +280,36 @@ TODO: Finish
 
 This takes a zsh-style regular expression that the option value must match.
 
-TODO: Basic, extended, or PCRE? Or choice? Or zsh setting?
-
 
 ==Storage==
 
-Each argument definition gets its own exported associative array, named
+Each argument definition gets its own associative array, named
 by the parser that defined it, "__", and the reference name of the argument.
-For example, `MYPARSE__quiet`.
+For example, `MYPARSE__quiet`.  The parser's `export` option determines whether
+these variables are local or exported; they are normally hidden.
 
 The fields/items in that assoc may include those shown below (most of which
-are the same as for Python `argparse.add_argument`):
-
-* arg_names -- the list of space-separated names for the argument.
-* action --
-* choices -- (since zsh cannot store arrays as data in assocs, the choices
-are stored as a string of space-separated tokens)
-* const --
-* default --
-* dest --
-* fold -- whether the value should be folded on reading (none, lower, or upper)
-* format -- a printf-style % code fro the items preferred output format
-* help --
-* nargs --
-* pattern -- a regex that the argument's value must match.
-* required --
-* type -- see zerg_types.
-
+are the same as for Python `argparse.add_argument`).
 Items with empty values may be omitted.
+
+* `\uEDDA.TYPE` -- like in the assoc representing a zerg parser, this
+key is used to self-identify the assoc, in this case as a "ZERG_ARG_DEF".
+The key in `$ZERG_MAGIC_TYPE`, set in [zerg_setup.sh].
+* `arg_names` -- the list of space-separated names for the argument.
+* `action` -- a choice from `$zerg_actions` (see [zerg_add.md]).
+* `choices` -- (since zsh cannot store arrays as data in assocs, the choices
+are stored as a string of space-separated tokens)
+* `const` -- a value to be stored by `store_const`, `append_const`, etc.
+* default -- the value to store in the destination, if the option is
+not explicitly specified.
+* `dest` -- a name under which to store the option value. By default,
+the destination name is derived from the option's reference name by
+`zerg_opt_to_var` (from [zerg_setup.sh]), which removes leading hyphens
+and converts internal hyphens to underscores.
+* `fold` -- whether the value should be folded on reading (none, lower, or upper)
+* `format` -- a printf-style % code fro the items preferred output format
+* `help` -- a short description of the option
+* `nargs` -- how many tokens to grab following the option name.
+* `pattern` -- a regex that the argument's value must match.
+* `required` -- this option must akways be specified.
+* `type` -- a choice from `$zerg_types` (see [zerg_types.md].

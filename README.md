@@ -7,52 +7,64 @@ I wanted a fairly easy way for shell scripts to handle options more
 like many other languages, such as:
 
 * Ignoring case for option names
-* Recognizing unique abbreviations
-* Handling various value-types like ints in various bases, floats, dates, and enums
+* Recognizing unique abbreviations and aliases
 * Providing "help" messages for specific options and the tool as a whole
+* Checking various value-types like ints in various bases, floats, dates, etc.
 * Easier migration between zsh and Python (for users and developers!).
 
 The library also include support functions specifically for shell variables
 that are arrays (`ar_accessors.sh`), associative arrays (`aa_accessors.sh`),
-and sets stored as associative arrays (`set_accessors.sh`). These provide
-shell functions like most of the Python methods available for the corrsponding
-types. For example, `aa_values`, `set_union`, etc.
+sets stored as associative arrays (`set_accessors.sh`), and string functions
+and constants (`str_accessors.sh`). These provide
+shell functions like most of the Python methods available for the corresponding
+types. For example, `aa_values`, `set_union`, `str_rfind`, etc. These can be used
+with or without zerg's argparse-like features.
 
 ===Example===
 
 Do this first (say, from your [.zshrc] or similar file)
-to set up zerg as a whole (see [zerg_setup.md] for details)_:
+to set up zerg as a whole (see [zerg_setup.md] for details):
 
 ```
     source 'zerg_setup.sh'
 ```
 
-This will define common functions and variables, such as
-Then create a named parser and a set of argument definitions, and finally
-parse your argument. Like this:
+This will define common functions and variables, such as standard error codes,
+messaging functions, etc. and then source the remaining files.
+
+Then create a named parser, a set of argument definitions, and finally
+parse your arguments. Like this:
 
 ```
     zerg_new MYPARSER
+
     zerg_add MYPARSER "--quiet -q" --action store_true --help "Less messages."
     zerg_add MYPARSER "--encoding" --type ident --default 'utf-8'
         --help "Charset to use."
+    ...
+
     zerg_parse MYPARSER "$@"
+
     [ $quiet ] || echo "Hi, I'm starting up."
     ...
 ```
 
 The resulting values by default go into variables named the same as their
-reference name (it seems to be hard to make those local to your function
-that is calling zerg, so they are exported/global. Be careful not to tromp
-on other variables.
+reference name. It seems to be hard to make those local to your function
+that is calling zerg, so they are exported/global. They also use the zsh
+hidden flag so they don't show up in a generic list of variable (such as
+from just `typeset -p`).
+
+Be careful not to tromp on other variables. For example, you shouldn't name
+a parser "PATH".
 
 This code would typically go at the top of your own shell function definition.
-Most of the options, constants, etc. are named the same as in Python argparse.
-The set of types includes the most common basic ones as in Python
+Most of the options, constants, etc. are named the same as in Python `argparse`.
+The set of types includes many common basic ones as in Python
 argparse, but has additions for convenience.
 
-I don't think Python argparse is perfect, but it's
-pretty capable, and its popularity means modeling this directly on it lets
+I don't think Python `argparse` is perfect, but it's
+pretty capable and its popularity means modeling this directly on it lets
 many users re-apply knowledge of names, behaviors, etc. in either direction.
 
 There is also a function included (`zerg_to_argparse`) that converts a zerg
@@ -63,57 +75,66 @@ parser definition to corresponding Python.
 
 A parser is stored in a zsh associative array with the given name
 (`MYPARSER` in this example). These are created as global (-x)
-and hidden (-H). The associative array has 3 kinds of entries:
+and hidden (-H). The associative array has 4 kinds of entries:
 
-* `parser_new` options (such as`ignore-case`) are stored under their names,
-not including leading hyphens)
-* Arguments added to the parser are listed under all their names (including
-hyphens), and each one's value is the associative array in which that argument's
-definition is stored. Normally this consist of the name of the parser
-that defined it, "__", and the argument name (minus leading hyphens, and with
-internal hyphens changed to "_" so they're legit zsh variable names).
-* A reserved `refnames` entry, which contains a space-separated list
-of all the arguments' reference names, including leading hyphens.
+* An item identifying that the assoc represents zerg parser, under
+a constant key available in `$ZERG_MAGIC_TYPE` (from [zerg_setup.sh]).
+The first character is U+EDDA, a private-use Unicode character.
+* Parser-level options (such as`ignore-case`) are stored in the parser assoc,
+under their names not including leading hyphens)
+* Arguments added to the parser have all their names as items in the parser assoc
+(including
+hyphens), and each one's value is the name of a different associative array,
+where that argument's
+definition is stored. That array's name consists of the name of the parser
+that defined it, "__", and the argument's reference (first) name. For example,
+the definition of the "quiet" option for MYPARSER would be stored in
+MYPARSER__quiet. The name does not include leading hyphens, and any
+internal hyphens are changed to "_".
+* Reserved entries for space-separated lists of attribute names
+including their hyphens (to ease later checking): one for
+all the arguments' reference names, and one for all *required attributes*.
 
-The three types are separated by blank lines for readability in this example:
+An example is shown below, with the types of entries
+separated by blank lines for readability:
 
 MYPARSER=(
-    [abbrev_enums]=1
+    [\uEDDA.TYPE]=ZERG_PARSER
+
     [add_help]=''
     [allow_abbrev]=1
+    [allow_abbrev_choices]=1
     [description]=''
     [description_paras]=''
     [epilog]=''
     [help_file]=''
     [help_tool]=''
-    [ic_choices]=''
     [ignore_case]=1
+    [ignore_case_choices]=1
     [ignore_hyphens]=''
-    [on_redefine]=error
+    [on_redefine]=allow
     [usage]=''
     [var_style]=separate
 
-    [--quiet]=PARSER__quiet
-    [--verbose]=PARSER__verbose
-    [--ignore-case]=PARSER__ignore_case
-    [-i]=PARSER__i
-    [-v]=PARSER__verbose
+    [--quiet]=MYPARSER__quiet
+    [--verbose]=MYPARSER__verbose
+    [--ignore-case]=MYPARSER__ignore_case
+    [-i]=MYPARSER__i
+    [-v]=MYPARSER__verbose
 
-    [refnames]='--quiet --verbose -i -v --ignore-case'
+    [all_arg_names]='--quiet --verbose -i -v --ignore-case'
+    [required_arg_names]=''
 )
 
 ==Argument definition storage==
 
 You add arguments with `zerg_add`, which is very like Python's
-`parser.add_argument()`. You can set them up in advance (see `zerg_use`),
-or just at the top of a shell function as shown below.
+`parser.add_argument()`. You can just define arguments at the top of
+a shell function as shown below. Or you can re-use arguments from a
+previously-defined parser via `zerg_use` (zerg includes a parser named `ZERG`,
+which provides several commplace option definitions such as quiet, verbose,
+encoding, recursive, etc.
 
-Each added argument definition is stored
-in its own associative array, named like `MYPARSER__quiet`, etc.
-
-Each argument definition is stored in its own associative array, whose name
-includes the parser name, two underscores, and the argument's reference
-name. For example, `OPTS__quiet`.
 
 Command-line options do not all require a value in either Python or zsh. Those
 that do not, get a value that depends on `--default` or `--action` just like
@@ -124,6 +145,7 @@ MYPARSER__quiet=(
     [action]=store_true
     [help]='Suppress messages.'
 )
+
 
 ==Example==
 
@@ -155,11 +177,10 @@ you were passed:
     zerg_parse OPTS "$@"
 ```
 
-The resulting options values can be put either into separate variables,
-or into a single associative array.
-However, in an assoc any array values (such as created with `--action append`)
-are joined into a single string. This is because zsh does not support having
-arrays as members of other arrays.
+The resulting option values can be put either into separate variables
+(the default),
+or into a single associative array (see zerg_new's `--var-style` option
+to control this).
 
 See the doc files for each zerg file, and -h on individual zerg functions,
 for more information.
@@ -167,13 +188,13 @@ for more information.
 Zerg includes a package called `aa_accessors.sh`, which provide most of
 the same methods for zsh associative arrays (hence the "aa_" prefix),
 as Python provides for dicts. I find these easier to remember than
-zsh's panoply of expansion tools, such as `${${(P)1}[$key]`, and somewhat
+zsh's panoply of expansion tools, such as `${${(P)1}[$key]}`, and somewhat
 less error-prone when switching languages frequently.
 
 
 ==Error Codes==
 
-Common errors case use these names in the code, and generate the
+Common errors use these names in the code, and generate the
 indicated return code values (they are defined in `zerg_setup.sh`).
 
 * ZERR_NOT_YET (999): Unimplemented feature
@@ -183,7 +204,7 @@ indicated return code values (they are defined in `zerg_setup.sh`).
 (`is_type_name` given an unknown type names, returns ZERR_ENUM)
 * ZERR_ZERG_TVALUE (96): Value does not match specified zerg type
 * ZERR_BAD_OPTION (95): Unrecognized option name
-* ZERR_ENUM (94): Value does not match the expected enum/choices
+* ZERR_ENUM (94): Value does not match the expected enum
 * ZERR_NO_KEY (93): Key not found (generally in an assoc)
 * ZERR_NO_INDEX (92): Index not found (in list or string)
 * ZERR_UNDEF (91): Variable is not defined
@@ -192,31 +213,9 @@ indicated return code values (they are defined in `zerg_setup.sh`).
 * ZERR_TEST_FAIL (55): Case failed in a test suite
 
 
-
 ==See also==
 
 There are individual `.md` files for each code file here,
-giving more detail on its content and usage. Nearly all
-shell functions here respond to `-h` with brief help.
-
-
-==To Do==
-
-* Option `--ignore-hyphens` to ignore internal underscores
-and hyphens (for example, "--ignore-case",
-"--ignore_case", "--ignorecase" are considered the same)
-
-* Revise zerg_new to re-use existing args if found (blockable by some option)
-
-* Add --pattern to give a regex the value has to match (if nargs >1, regex
-should assume one space between?)
-
-* Lots of testing
-
-* Add metavar, usage, and help generation; support external help and formatter
-
-* Finish added types, normalized strings.
-
-* Maybe add 'parents', 'prefix_chars' (e.g. for "+")
-
-* Option to not hide all the assoc variables?
+giving more detail on its content and usage. Nearly all zerg
+shell functions respond to `-h` with brief help, and many accept
+`-q` to suppress messages.

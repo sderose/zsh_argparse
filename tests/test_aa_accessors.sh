@@ -37,7 +37,7 @@ testOutput 'assoc' sv_type aav_asc
 
 
 ###############################################################################
-# Test the assoc array stuff.
+# Test the associative array stuff.
 
 #set -x
 
@@ -85,8 +85,8 @@ testRC 0 aa_has $VN greet
 testRC 0 aa_unset $VN greet
 #typeset -p $VN
 
-testRC FAIL aa_has $VN greet
-testRC FAIL aa_get $VN greet
+testRC FAIL aa_has -q $VN greet
+testRC FAIL aa_get -q $VN greet
 #typeset -p $VN
 
 
