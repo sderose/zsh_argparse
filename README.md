@@ -78,7 +78,7 @@ A parser is stored in a zsh associative array with the given name
 and hidden (-H). The associative array has 4 kinds of entries:
 
 * An item identifying that the assoc represents zerg parser, under
-a constant key available in `$ZERG_MAGIC_TYPE` (from [zerg_setup.sh]).
+a constant key available in `$EDDA_CLASS_KEY` (from [edda_classes.sh]).
 The first character is U+EDDA, a private-use Unicode character.
 * Parser-level options (such as`ignore-case`) are stored in the parser assoc,
 under their names not including leading hyphens)
@@ -195,22 +195,22 @@ less error-prone when switching languages frequently.
 ==Error Codes==
 
 Common errors use these names in the code, and generate the
-indicated return code values (they are defined in `zerg_setup.sh`).
+indicated return code values (these variables are defined in `zerg_setup.sh`).
 
-* ZERR_NOT_YET (999): Unimplemented feature
-* ZERR_EVAL_FAIL (998): An 'eval' failed.
-* ZERR_ARGC (98): Wrong number of arguments
-* ZERR_SV_TYPE (97): Value is not of required zsh/typeset type
-(`is_type_name` given an unknown type names, returns ZERR_ENUM)
-* ZERR_ZERG_TVALUE (96): Value does not match specified zerg type
-* ZERR_BAD_OPTION (95): Unrecognized option name
-* ZERR_ENUM (94): Value does not match the expected enum
-* ZERR_NO_KEY (93): Key not found (generally in an assoc)
-* ZERR_NO_INDEX (92): Index not found (in list or string)
-* ZERR_UNDEF (91): Variable is not defined
-* ZERR_BAD_NAME (90): String is not a valid identifier
-* ZERR_DUPLICATE (89): Key or other thing already exists
-* ZERR_TEST_FAIL (55): Case failed in a test suite
+* $ZERR_NOT_YET (999): Unimplemented feature
+* $ZERR_EVAL_FAIL (998): An 'eval' failed.
+* $ZERR_ARGC (98): Wrong number of arguments
+* $ZERR_SV_TYPE (97): Value is not of required zsh/typeset type
+(`is_type_name` given an unknown type names, returns $ZERR_ENUM)
+* $ZERR_ZERG_TVALUE (96): Value does not match specified zerg type
+* $ZERR_BAD_OPTION (95): Unrecognized option name
+* $ZERR_ENUM (94): Value does not match the expected enum
+* $ZERR_NO_KEY (93): Key not found (generally in an assoc)
+* $ZERR_NO_INDEX (92): Index not found (in list or string)
+* $ZERR_UNDEF (91): Variable is not defined
+* $ZERR_BAD_NAME (90): String is not a valid identifier
+* $ZERR_DUPLICATE (89): Key or other thing already exists
+* $ZERR_TEST_FAIL (55): Case failed in a test suite
 
 
 ==See also==

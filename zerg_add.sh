@@ -3,7 +3,7 @@
 #
 if ! [ $ZERG_SETUP ]; then
     echo "Source zerg_setup.sh first." >&2
-    #return ZERR_UNDEF
+    #return $ZERR_UNDEF
 fi
 
 typeset -A zerg_actions=(
@@ -11,8 +11,10 @@ typeset -A zerg_actions=(
     [toggle]=0 [count]=0 [help]=0 [version]=0
     [append]=1 [append_const]=0 [extend]=1
 )
+# turn that into 'case' expr --store|--store-const....
+zerg_actions_exp=${(j:|:)${(k)zerg_actions}:gs/_/-/:gs/^/--/}
 
-typeset -A aa_fold_values=( [upper]=1 [lower]=1 [none]=0 )
+typeset -A aa_fold_values=( [upper]=1 [lower]=2 [""]=0 )
 
 typeset -a zerg_argdef_fields=(
     arg_names action choices const default dest
@@ -20,12 +22,13 @@ typeset -a zerg_argdef_fields=(
     #  counter flag on_redefine reset??
 
 _zerg_argdef_init() {
+    # Usage: _zerg_argdef_init def_name arg_names
     # Check for existing definition and deal  ### TODO Factor out, move up?
     local def_name="$1" arg_names="$2"
     local priorType=`sv_type $def_name`
     if [[ $priorType == ^(scalar|integer|float|array)$ ]]; then
         tMsg 0 "Cannot create zerg parser arg '$def_name', variable already exists."
-        return ZERR_DUPLICATE
+        return $ZERR_DUPLICATE
     elif [[ $priorType == "assoc" ]]; then
         local parser_name=${def_name/__*/}
         local disp=$(aa_get "$parser_name" "on_redefine")
@@ -38,24 +41,24 @@ _zerg_argdef_init() {
             unset "$def_name"
         elif [[ $disp == error ]]; then
             tMsg 0 "Error: Argument '$def_name' already exists."
-            return ZERR_DUPLICATE
+            return $ZERR_DUPLICATE
         else
             tMsg 0 "Unknown value '$disp' for --on-redefine."
-            return ZERR_ENUM
+            return $ZERR_ENUM
         fi
     fi
 
     # Create assoc to store the argdef, and apply defaults
     typeset -gHA $def_name
-    aa_set $def_name "$ZERG_MAGIC_TYPE" "ZERG_ARG_DEF"
+    aa_set $def_name "$EDDA_CLASS_KEY" "ZERG_ARG_DEF"
     aa_set $def_name action "store"
-    aa_set $def_name arg_names "$2"
-    aa_set $def_name const ""
-    aa_set $def_name default ""
-    aa_set $def_name dest ""
-    aa_set $def_name fold "none"
-    aa_set $def_name required ""
-    aa_set $def_name type "str"
+    aa_set $def_name arg_names "$arg_names"
+    #aa_set $def_name const ""
+    #aa_set $def_name default ""
+    #aa_set $def_name dest ""
+    #aa_set $def_name fold ""
+    #aa_set $def_name required ""
+    #aa_set $def_name type "str"
 }
 
 
@@ -66,12 +69,13 @@ zerg_add() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_add [-q] parser_name "arg_names" [argOptions...]
-    -q: Suppress message from the zerg_add operation itself
     parser_name: name of the parser to add to (see zerg_new)
     arg_names: space-separated list of aliases (e.g. "--quiet -q --silent")
         The first one is the reference name.
     argOptions: Options that determine the treatment of the argument being defined.
         Most are the same as Python `argparse`, such as --type, --default, --help...
+Options:
+    -q: Suppress message from the zerg_add operation itself
 
 parser_name must be an already-existing associative array, typically created by
 `zerg_new`. `zerg_add` creates another associative array for the definition, named as
@@ -89,56 +93,62 @@ actual arguments to you shell function don't get re-parsed):
      zerg_parse parser_name "$*"
 EOF
             return ;;
-        -q|--quiet) quiet=1;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        -q|--quiet) quiet="-q" ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    req_argc 2 99 $# || return ZERR_ARGC
-    req_sv_type assoc "$1" || return ZERR_SV_TYPE
+    req_argc 2 99 $# || return $ZERR_ARGC
+    req_edda_class ZERG_PARSER "$1" || return $?
 
     # Process the parser name and quoted list of this arg's names/aliases
     local parser_name="$1"
-    local -a arg_names=(${=2})  # split on whitespace
-    if [[ ${#arg_names} -eq 0 ]]; then
+    local arg_names="$2"
+    local -a arg_names_list=(${(z)arg_names})  # split on whitespace
+    if [[ $#arg_names_list -eq 0 ]]; then
         [ $quiet ] || tMsg 0 "No option name(s) provided."
-        return ZERR_BAD_NAME
+        return $ZERR_BAD_NAME
     fi
-    for name in "${arg_names[@]}"; do
-        if [[ "$name" != -* ]]; then
-            [ $quiet ] || tMsg 0 "Option '$name' must start with hyphen."
-            return ZERR_BAD_NAME
+    for arg_name in $arg_names_list; do
+        if ! is_argname -q "$arg_name"; then
+            [ $quiet ] || tMsg 0 "Option string '$arg_name' is invalid."
+            return $ZERR_BAD_NAME
         fi
     done
-    local ref_name=$arg_names[1]  # E.g. "--quiet -q --silent-ly" --> "--quiet"
-    local def_name="${parser_name}__"`zerg_opt_to_var "$ref_name"`  # E.g. "silent_ly"
-    #echo "Aliases '${arg_names[@]}', ref_name '$ref_name', def_name '$def_name'."
+    local ref_name=$arg_names_list[1]
+    local def_name="${parser_name}__"`zerg_opt_to_var "$ref_name"`
+    print "\nAliases '$arg_names', ref_name '$ref_name', def_name '$def_name'."
     shift 2
 
-    _zerg_argdef_init "$def_name" "${arg_names[@]}" || return $?
+    _zerg_argdef_init "$def_name" "$arg_names" || return $?
 
     # Parse options making up this argument definition
-    # NOTE: 'case' doesn't fully like variable refs.
-    # But try like https://unix.stackexchange.com/questions/446374/\
-    #    $~pattern)
-    # That's why the long literals for types and actions.
     while [[ $# -gt 0 ]]; do
+        local name=`zerg_opt_to_var "$1"`
+        tMsg 0 "Arg '$1' (->$name)."
         case "$1:l" in
             --type|-t)
-                aa_has zerg_types "$2:l" || return ZERR_ENUM
-                aa_set $def_name type "$2:l"; shift ;;
+                shift
+                name=`zerg_opt_to_var "$1"`
+                aa_has zerg_types "$name" || return $ZERR_ENUM
+                aa_set $def_name type "$name" ;;
 
             --action|-a)
-                aa_has zerg_actions "$2:l" || return ZERR_ENUM
-                aa_set $def_name action "$2:l"; shift ;;
-            --bool|--anyint|--binint|--octint|--int|--hexint|--pid|--float|--prob|--logprob|--complex|--str|--char|--ident|--idents|--argname|--cmdname|--uident|--uidents|--path|--url|--format|--pid|--lang|--regex--datetime|--time|--date|--duration|--epoch)
-                local tname=$1:l
-                aa_set $def_name type "$tname[3,-1]" ;;
+                shift
+                name=`zerg_opt_to_var "$1"`
+                echo "Action '$name' for $def_name."
+                aa_has zerg_actions "$name" || return $ZERR_ENUM
+                aa_set $def_name action "$name" ;;
 
---store|--store_const|--store_false|--store_true|--toggle|--count|--version|--append|--append_const|--extend)
-                local aname=$1:l
-                aa_set $def_name action "$aname[3,-1]" ;;
+            ${~zerg_actions_exp})
+                tMsg 0 "GOT IT: $1"
+                aa_set $def_name type "$name" ;;
+            --bool|--anyint|--binint|--octint|--int|--hexint|--pid|--float|--prob|--logprob|--complex|--str|--char|--ident|--idents|--argname|--cmdname|--uident|--uidents|--path|--url|--format|--pid|--lang|--regex|--datetime|--time|--date|--duration|--epoch)
+                aa_set $def_name type "$name" ;;
+
+--store|--store-const|--store-false|--store-true|--toggle|--count|--version|--append|--append-const|--extend)
+                aa_set $def_name action "$name" ;;
 
             # Convenient combo shorthands
             --flag)
@@ -150,40 +160,47 @@ EOF
 
             # Other options
             --choices|-c)
-                req_zerg_type idents "$2" || return ZERR_ZERG_TVALUE
-                aa_set $def_name choices "$2"; shift ;;
+                shift
+                req_zerg_type idents "$1" || return $?
+                aa_set $def_name choices "$1" ;;
             --const|-k)
-                aa_set $def_name const "$2"; shift ;;  # Type-check at end
+                shift; aa_set $def_name const "$1" ;;  # Type-check at end
             --default|-d)
-                aa_set $def_name default "$2"; shift ;;  # Type-check at end
+                shift; aa_set $def_name default "$1" ;;  # Type-check at end
             --dest|-v)
-                req_zerg_type ident "$2" || return ZERR_ZERG_TVALUE
-                aa_set $def_name dest "$2"; shift ;;
+                shift
+                req_zerg_type ident "$1" || return $?
+                aa_set $def_name dest "$1" ;;
             --fold)
-                #aa_has aa_fold_values "$2:l" || return ZERR_ENUM
-                aa_set $def_name fold "$2:l"; shift ;;
+                shift
+                #aa_has aa_fold_values "$1:l" || return $?
+                aa_set $def_name fold "$1:l" ;;
             --format)
-                req_zerg_type format "$2" || return ZERR_ZERG_TVALUE
-                aa_set $def_name format "$2"; shift ;;  # TODO Check
+                shift
+                req_zerg_type format "$1" || return $?
+                aa_set $def_name format "$1" ;;  # TODO Check
             --help|-h)
-                aa_set $def_name help "$2"; shift ;;
+                shift; aa_set $def_name help "$1" ;;
             --metavar)
-                req_zerg_type ident "$2" || return ZERR_ZERG_TVALUE
-                aa_set $def_name metavar "$2"; shift ;;
+                shift
+                req_zerg_type ident "$1" || return $?
+                aa_set $def_name metavar "$1" ;;
             --nargs|-n)
-                [[ $2 == remainder ]] || req_zerg_type int "$2" || return ZERR_ZERG_TVALUE
-                aa_set $def_name nargs "$2"; shift ;;
+                shift
+                [[ $1 == remainder ]] || req_zerg_type int "$1" || return $?
+                aa_set $def_name nargs "$1" ;;
             --pattern|-x)
-                req_zerg_type regex "$2" || return ZERR_ZERG_TVALUE
-                aa_set $def_name pattern "$2"; shift ;;
+                shift
+                req_zerg_type regex "$1" || return $?
+                aa_set $def_name pattern "$1" ;;
             --required|-r)
                 aa_set $def_name required "1" ;;
             -*)
                 [ $quiet ] || tMsg 0 "Unknown option '$1'."
-                return ZERR_BAD_OPTION ;;
+                return $ZERR_BAD_OPTION ;;
             *)
                 [ $quiet ] || tMsg 0 "Unexpected positional argument '$1'."
-                return ZERR_BAD_OPTION ;;
+                return $ZERR_BAD_OPTION ;;
         esac
         shift;
     done
@@ -196,56 +213,80 @@ EOF
 
     if [ -n "$type" ]; then
         if [ -n "$const" ]; then
-            req_zerg_type "$type" "$const" || return ZERR_ZERG_TVALUE
+            req_zerg_type "$type" "$const" || return $?
         fi
         if [ -n "$default" ]; then
-            req_zerg_type $type $default || return ZERR_ZERG_TVALUE
+            req_zerg_type "$type" "$default" || return $?
         fi
-    fi
-    #echo "After parse/default: "`typeset -p def_name`
-
-    if ! [ `aa_get -q "$parser_name" "export"` ]; then
-        export -n $def_name
-    fi
-
-    # Register aliases in the parser (they all point to same def_name)
-    tMsg 1 "Adding '$arg_names' to parser arg_names."
-    aa_append_value "$parser_name" "all_arg_names" " $arg_names"
-    if [ $required ]; then
-        aa_append_value "$parser_name" "required_arg_names" "$ref_name"
     fi
 
     if [[ ${pargs[action]} == "toggle" ]]; then
         # TODO Finish action=toggle
         aa_set $def_name action store_true
         neg_name=${def_name/__/__no_}
-        typeset -ghA "$neg_name"
+        #typeset -ghA "$neg_name"
         aa_copy $neg_name $def_name
         aa_set $neg_name action store_false
-        for name in "${arg_names[@]}"; do
+        for name in $arg_names_list; do
+            #tMsg 0 "  Adding arg name '$name' and '--no-$name' to parser."
             aa_set "$parser_name" "$name" "$def_name"
             aa_set "$parser_name" "--no-$name" "$neg_name"  # hyphens?
         done
     else
-        for name in "${arg_names[@]}"; do
-            #tMsg 0 "Saving alias '$name' -> '$def_name'."
+        for name in $arg_names_list; do
+            #tMsg 0 "  Adding arg name '$name' -> '$def_name' to parser."
             aa_set "$parser_name" "$name" "$def_name"
         done
     fi
 
+    [ `aa_get -q "$parser_name" "export"` ] || export -n $def_name
+    aa_append_value $parser_name "all_def_names" "$def_name "
+    aa_append_value "$parser_name" "all_arg_names" "$arg_names "
+    [ $required ] && aa_append_value "$parser_name" "required_arg_names" "$ref_name "
+
+    #tHead "parser and argdef before zerg_add returns: "
+    aa_export -f view --sort $parser_name
+    aa_export -f view --sort $def_name
     return 0
 }
 
 
 ###############################################################################
 #
+zerg_parent() {
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: zerg_parent parser_name parent_name
+Re-use all argument(s) defined in another zerg parser. The parser and its
+argument(s) must still exist.
+    parser_name: name of the parser to add to (see zerg_new)
+    parent_name: the name of the parser to take argdefs from.
+This is just a wrapper around zerg_use.
+EOF
+            return ;;
+        -q) quiet="-q" ;;
+        *) break ;;
+      esac
+      shift
+    done
+
+    req_argc 2 2 $# || return $ZERR_ARGC
+    req_edda_class ZERG_PARSER "$1" || return $?
+    req_edda_class ZERG_PARSER "$2" || return $?
+    local -a parent_def_names=(${(z)${${(P)2}[all_def_names]}})
+    for def_name in parent_def_names; do
+        zerg_use $1 $def_name
+    done
+}
+
 zerg_use() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_use parser_name "full_arg_name"...
 Re-use an argument(s) defined in another zerg parser. The parser and its
-argumen(s) must still exist.
+argument(s) must still exist.
     parser_name: name of the parser to add to (see zerg_new)
     full_arg_name: the name of an assoc holding an argument definition created
     by another parser. This consists of the parser name, "__", and a ref_name.
@@ -260,17 +301,18 @@ EOF
       shift
     done
 
-    req_argc 2 99 $# || return ZERR_ARGC
-    local pname=$1
+    req_argc 2 99 $# || return $ZERR_ARGC
+    req_edda_class ZERG_PARSER "$1" || return $?
+    local parser_name=$1
     shift
 
     tMsg 0 "zerg_use not yet fully supported."
     while [ -n "$1" ]; do
-        req_sv_type assoc "$1" || return ZERR_SV_TYPE
+        req_edda_class ZERG_ARG_DEF "$1" || return $?
         local arg_names=`aa_get $1 "arg_names"`
-        aa_append_value "$pname" "all_arg_names" " $arg_names"
+        aa_append_value "$parser_name" "all_arg_names" "$arg_names "
         local req=`aa_get $1 "required"`
-        [ $req ] && aa_append_value "$pname" "required_arg_names" " $arg_names"
+        [ $req ] && aa_append_value "$parser_name" "required_arg_names" " $arg_names"
         shift
     done
 }

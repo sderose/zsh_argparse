@@ -10,41 +10,41 @@ by the more general [zerg_setup.sh]).
 zerg's types serve the same purpose as values for the `type` argument of
 Python's `argparse.add_argument`. They mean that a given string
 *can be interpreted as* the given type.
-So in argument parsing (whether in zsh or Python), saying "type=int` means the command line items must be a string that amounts to a decimal
-integer, such as "64" (in ASCII, Unicode, or whatever encoding your terminal
-and Python are using).
+So in argument parsing (whether in zsh or Python), saying `type=int` means the command line items must be a string that amounts to a decimal
+integer, such as "64". zerg provides `--type int` with that same meaning.
 
-zerg provides `--type int`, with that same meaning but it also provides for
-other conventions, such as `hexint` which requires
-a base-16 expression such as "0xA0". While this also typically  represent
-an integer value to be stored, what it actually constrains (like Python argparse's `type`) is what strings the user can use to express that type.
-Similarly, zerg's `octint` requires a base-8 value such as "0100"
-(also equal to decimal 64), and `anyint` allows any of 999, 0777, 0xFFFF,
-or 0b10110111.
+Zerg also adds types that distinguish *string representation* of values,
+such as `hexint` for a base-16 expression such as "0xA0". argparse could have
+done this by using `int(arg, 0)` instead of just `int(arg)` internally,
+but it doesn't (as of this writing). I consider
+it common enough to just provide off-the-shelf (batteries, y'know).
+Likewise, zerg's `octint` requires a base-8 value such as "0o100"
+`binint` like "0b10110111", and `anyint` which allows any of the 4 bases.
 
 In addition, there are convenience types for things like dates, times,
-urls, and some important mathematical types such as `prob`, `logprob`,
-and `complex`. Tensors are not (yet) supported.
+urls, pids, and some important mathematical types such as `prob`, `logprob`,
+and `complex`. Tensors have rudimentary support, represented as whitespace
+separated sequences of "(", ")", and floats.
 
 The types are listed in a zsh associative array named `zerg_types`, which is
 created by `zerg_setup.sh`. Each has its name (all lower case) as the key,
 and the value is a near-equivalent Python type. The Python type is used
-mainly by `zerg_to_argparser()`.
+mainly by `zerg_to_argparser()`. "zergtypename" is itself a zerg type.
 
 ==Type-related functions==
 
 Each type has a tester named `is_` plus the (lower case) type name, such as
-`is_int`.
-These return code 0 (success) if the string passed fits the type. If
+`is_int`. These return code 0 (success) if the string passed fits the type. If
 the string does not match the type, return code 1 is returned and a
 message is printed (unless the function was given the `-q` option (for quiet).
+A few of the is_xxx functions offer options, such as is_pid checking whether
+a process not only exists, but is signalable.
 
 Other functions provided by `zerg_types.sh`:
 
-* `is_type_name [name]` -- succeeds if `name` is a know type name
-
 * `is_of_type [name] [string]` -- this is just another way to run the `is_`
-function for the given type name
+function for the given zerg type name. Very handy if you have a type name
+in a variable (such as in an EDDA object definition).
 
 * `zerg_ord [char]` returns the numeric code point for the character
 
@@ -58,7 +58,7 @@ function for the given type name
 
 * `int` -- a decimal integer, optionally signed
 
-* `hexint` -- a decimal integer like 0xFE01
+* `hexint` -- a hexadecimal integer like 0xFE01
 
 * `octint` -- an octal integer like 0o777
 
@@ -66,7 +66,13 @@ function for the given type name
 
 * `anyint` -- an int in any of those forms
 
-* `pid` -- an active process ID
+* `unsigned` -- a decimal integer with no sign prefix
+
+* `pid` -- an active process ID. The `is_pid` test can also take
+a `-a`- or `--active` option, to accept only active (signalable) processes.
+
+The letters indicating base (b, o, and x) are recognized regardless of case.
+
 
 ===Boolean type===
 
@@ -95,16 +101,39 @@ which seems cleaner.
 
 * `logprob` -- A non-positive `float`, as for the logarithm of a probability
 
+* `complex` -- A complex number in a form such as -3.14+1.618i.
+The trailing `i` can be any of [iIjJ].
+
+* `tensor` -- Tensor is a recognized type, but specific shapes are not
+checked. The type expects a string consisting of one or more whitespace
+separated floats. The floats may also be grouped by parentheses, which
+must (for now) also be whitespace separated.
+The parentheses are checked for balance but not for uniform cardinalities.
+For example:
+
+( ( 1E-10 2 3 ) ( 4 5 6 ) ( 7 -8 9 ) )
+
+or
+
+( ( 0.110001 0.1234567891011 0.235711131719 0.412454033 )
+  ( 0.57721 0.6180338 0.91596 1.839 )
+  ( 1.3247 1.20205 1.6180338 2.502 )
+  ( 2.685 2.71828 3.14159 4.669 6.28318) )
+
 
 ===String types===
 
-Strings can also be affected by case-folding, whitespace normalization,
-and having to match a given regular expression. Tests here tend to be loose,
-so that only serious violations of the syntax are flagged (sometimes it would
-be time-consuming to do much more). The distinct types are still useful for
-making argument definitions more readable, and for being clear about the
-intent. For example, `epoch` times are syntactically just floats, but
-the intention communicated by declaraing it is quite distinct.
+"string" very often is used as a catch-all for other types, leaving important
+constraints ignored. In zsh, most variables are technically strings even when
+more accurate types are available; it's slightly easier to type `local n=1`
+even when `local -i n=1` would be slightly safer and more precise. And
+there are many cases like variable names, dates, language codes, and
+countless "enums" that are highly constrained, not merely generic "strings".
+
+Strings often also want special treatment such as case-folding, whitespace
+normalization, and having to match a given regular expression.
+zerg provides several subtypes of string, and the zerg argument parser
+can be set up to handle case, pattern-matching, and so on.
 
 * `str` -- any string
 
@@ -120,26 +149,34 @@ and may continue with more letters, digits, and/or underscores.
 
 * `idents` -- one or more `ident` items, separated by whitespace.
 
+* `uident` -- a Unicode identifier token. The intent is to resemble
+identifiers as in a programming language that support Unicode names,
+but the rules are fairly loose.
+
+* `uidents` -- one or more `utoken` items, separated by whitespace.
+
 * `argname` -- a typical command-line argument (option) name,
-either a hyphen plus one letter, or two hyphens, a letter,
+either a hyphen plus one letter; or two hyphens, a letter,
 and perhaps continuing with more letters, digits, and/or underscores.
+This does not currently acknowledge bundled single-character options (TODO).
+
 Both in Python argparse and in zerg, such names are converted for
 use as destination variable names by dropping the leading hyphen(s)
-and changing internal hyphens to underscores (in zerg, that result
-is prefixed by the name of the parser that created them and "__" to
-make the name of the associative array created to store the argument
-definition (which, in turn, may be pointed to from multiple alias names
-in one or more parsers).  See also `zerg_new` options `ignore-case`,
-`ignore-hyphens`, `allow-abbrev`; and functions `zerg_add` and `zerg_use`.
+and changing internal hyphens to underscores. `zerg_opt_to_var` does this.
+In zerg, actual argument definitions are stored in assocs named by
+the parser that created them, 2 underscores, and the argument's reference name
+as transformed via `zerg_opt_to_var`.
+See `zerg_new` and `zerg_add` for more details.
 
 * `cmdname` -- the name of a currently-available command. This includes
 executables along PATH, aliases, builtins, and shell functions.
 
-* `uident` -- a Unicode identifier token. The intent is to resemble
-identifiers as in a programming language that support Unicode names,
-but the rules are fairly loose.  TODO
+* `varname` -- the name of a currently-available shell variable.
+If a second argument is given it should be the name of a zsh variable type,
+and the variable will be tested for whether it's of that type
+(namely undef, scalar, integer, float, array, or assoc -- see sv_type).
 
-* `uidents` -- one or more `utoken` items, separated by whitespace.  TODO
+* `zergtypename` -- the name of a zerg-defined datatype.
 
 * `regex` -- an actual regex expression. Not to be confused with
 a string *that matches* a particular expression.
@@ -167,7 +204,7 @@ There's a lot to these, and they're not quite the same as in C or Python.
 ===Enumerations===
 
 Enumerations are handled as strings, with the values constrained to be
-`token`s chosen from a list given on the `--choices` option to `add_argument`.
+identifier tokens chosen from a list given on the `--choices` option to `add_argument`.
 There are options to ignore case and/or to recognize abbreviations for these.
 
 
@@ -194,29 +231,22 @@ continue with one or more number+unit parts, in descending order of size
 * epoch -- this is for a *nix "Epoch time", the number of seconds since
 the start of 1970. Syntactically, this is just a `float`, so can represent
 sub-second precision and dates prior to 1970 (although other issues arise
-ranging from leap-seconds to the Gregorian calendar reform)_/
+ranging from leap-seconds to the Gregorian calendar reform).
 
 
 ===Futures===
 
+(see also [TODO.md])
+
 Other types may be added, such as the following (which could be useful for
 helping with zsh auto-completion and Unicode among other things):
+
+* units such as for *nix `units` command
 
 * [glob] -- a string that specifies a number of file-system objects, such as
 `*/*.sh`.
 
-* [command] -- the name of an existing executable command (including shell functions,
-aliases, builtins, etc).
-
 * [function] -- the name of an existing shell functions.
-
-* [tensor] -- a tensor, as a list of `float`s to be grouped according to
-a particular `shape`, which would also need to be specified.
-
-* [complex] -- a complex number, in a form such as 3.14+1.618i (or perhaps "j"
-on the end like Python).
-
-* [pid] live?
 
 * [host] numeric vs. named?
 
@@ -224,11 +254,7 @@ on the end like Python).
 
 * [group] numeric vs named
 
-* [encoding] -- cf `iconv -l`
-
-* [anychar], takes literal char or U+ codepoint or entity/char name
-
-* xsd types? date portions, pos/neg/nonpos/nonneg int
+* xsd types? date portions, pos/neg/nonpos int
 
 
 ==================================================== Earlier doc

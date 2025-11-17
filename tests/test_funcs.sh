@@ -18,7 +18,7 @@ print_chars() {
 testRC() {
     if [[ $# < 2 ]]; then
         echo "testRC: Need 2 arguments (result, command), not $#."
-        return ZERR_ARGC
+        return $ZERR_ARGC
     fi
     local expect=$1  # 'PASS', 'FAIL', or a specific number
     shift
@@ -32,13 +32,13 @@ testRC() {
         else
             tMsg 0 "FAIL: $@\n    expected RC $expect but got $rc."
             ((FAILCT+=1))
-            return ZERR_TEST_FAIL
+            return $ZERR_TEST_FAIL
         fi
     elif [[ $expect == 'FAIL' ]]; then
         if [[ $rc == 0 ]]; then
             tMsg 0 "FAIL (unexpected pass): $@"
             ((FAILCT+=1))
-            return ZERR_TEST_FAIL
+            return $ZERR_TEST_FAIL
         else
             tMsg 1 "PASS: $@"
             return 0
@@ -51,7 +51,7 @@ testRC() {
             tMsg 0  "FAIL: $@"
             tMsg 0  "    (expected RC $expect but got $rc)"
             ((FAILCT+=1))
-            return ZERR_TEST_FAIL
+            return $ZERR_TEST_FAIL
         fi
     fi
 }
@@ -59,7 +59,7 @@ testRC() {
 testOutput() {
     if [[ $# < 2 ]]; then
         tMsg 0 "testOutput: Need 2 arguments (result, command), not $#."
-        return ZERR_ARGC
+        return 99
     fi
     local expect="$1"
     shift
@@ -76,13 +76,13 @@ testOutput() {
     #print_chars $expect
     #print_chars $gotten
     ((FAILCT+=1))
-    return ZERR_TEST_FAIL
+    return $ZERR_TEST_FAIL
 }
 
 testEQ() {
     if [[ $# < 2 ]]; then
         tMsg 0 "testEq: Need 2 arguments (result, command), not $#."
-        return ZERR_ARGC
+        return 99
     fi
     local expect="$1"
     shift
@@ -94,5 +94,5 @@ testEQ() {
     fi
     tMsg 0 "FAIL: $@\n    expected '$expect'\n     but got '$gotten' (and RC $rc)"
     ((FAILCT+=1))
-    return ZERR_TEST_FAIL
+    return $ZERR_TEST_FAIL
 }

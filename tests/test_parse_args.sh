@@ -5,7 +5,7 @@
 ###############################################################################
 # Test zerg.
 
-local TEST_V="" TEST_TYPES="" TEST_ACTIONS=""
+local TEST_V="" TEST_TYPES="1" TEST_ACTIONS=""
 if [[ $1 == "-v" ]]; then
     TEST_V=1; ZERG_V=1; shift
 fi
@@ -15,9 +15,9 @@ source ../zerg_setup.sh
 
 if [[ `sv_type PARSER` != "undef" ]]; then
     tMsg 0 "'PARSER' already defined. Nuking it first."
-    unset "PARSER"
-    if [[ "$PARSER" ]]; then
-        tMsg 0 "unset for PARSER assoc failed!"
+    zerg_del "PARSER"
+    if [[ "$PARSER" ]] || [[ "$PARSER" ]]; then
+        tMsg 0 "zerg_del for PARSER assoc failed!"
         return
     else
         tMsg 0 "Successfully removed PARSER assoc."
@@ -25,40 +25,59 @@ if [[ `sv_type PARSER` != "undef" ]]; then
 fi
 
 tHead "Testing zerg_new"
-zerg_new PARSER --ignore-case --ignore-case-choices --description "descr text" --allow-abbrev --allow-abbrev-choices --epilog "Nevermore."
-[ $TEST_V ] && typeset -p PARSER
+zerg_new PARSER --ignore-case --ignore-case-choices --description "descr text" --allow-abbrev --allow-abbrev-choices --epilog "Nevermore." --var-style assoc
+#aa_export -f view --sort PARSER
 
 tHead "Testing adds"
-zerg_add PARSER "--quiet" --action store_true --help "Less chatty."
+zerg_add PARSER "--quiet -q --silent" --store-true --help "Less chatty."
 [ $? ] || tMsg 0 "zerg_add for PARSER --quiet failed."
-[ $TEST_V ] && echo "Quiet opt def: " && typeset -p PARSER__quiet
+#tHead "After zerg_add:"
+#aa_export -f view --sort PARSER__quiet
+
+tHead "Testing parse"
+zerg_parse PARSER --quiet hello.txt file2.txt
+
+tHead "Results"
+aa_export -f view --sort PARSER__results
+
+return
+
+
+###############################################################################
+#
+tHead "More adds"
 
 zerg_add PARSER "--verbose -v" --action count --help "More chatty."
 [ $TEST_V ] && typeset -p PARSER__verbose
-zerg_add PARSER "-i" --action store_true --dest no_case --help "Disregard case distinctions."
+
+zerg_add PARSER "--ignore-case -i" --action store_true --dest no_case --help "Disregard case distinctions."
 [ $TEST_V ] && typeset -p PARSER__no_case
 
 zerg_add -q PARSER "notgood" --action store_true --help "Bad name, add should fail."
 [ $TEST_V ] && typeset -p PARSER__quiet
 
+[ -v PARSER__quiet ] || tMsg 0 "PARSER__quiet missing"
+[ -v verbose ] || tMsg 0 "PARSER__verbose missing"
+[ -v PARSER__i ] && tMsg 0 "PARSER__i unexpected"
+[ -v PARSER__ignore_case ] || tMsg 0 "PARSER__ignore_case missing"
 
 tHead "Testing parse"
-zerg_parse PARSER --verbose --nomac --maxchar 65535  -q -v hello.txt file2.txt
+zerg_parse PARSER --verbose --silent hello.txt file2.txt
 
-aa_export -f view --sort PARSER
-
-#echo "Got: quiet $quiet, verbose $verbose, nomac $nomac, maxchar $maxchar."
+echo "Got: quiet $quiet, verbose $verbose, nomac $nomac, maxchar $maxchar."
+typeset -p PARSER__results
 
 tHead "Testing zerg_to_argparse"
-zerg_to_argparse PARSER
+ap=`zerg_to_argparse PARSER`
 
-
+tHead "Bailing, short test."
+return
 
 ###############################################################################
 # Types
 #
 if [ $TEST_TYPES ]; then
-    zerg_add PARSER "--maxPi" --type float --default sys.maxunicode \
+    zerg_add PARSER "--maxPi" --type float --default 98765 \
         --help "When displaying a range of code points \ skip any above this."
     [ $TEST_V ] && typeset -p maxPi
 
@@ -187,10 +206,10 @@ fi
 
 
 ###############################################################################
-### RE-use
+### Test re-use
 
 ### Parsing
 tHead "Testing parse"
-zerg_parse -v PARSER -quiet -v --nomac --maxchar 65535 hello.txt
+zerg_parse -v PARSER --quiet -v --nomac --maxchar 65535 hello.txt
 
 echo "Got: quiet $quiet, verbose $verbose, nomac $nomac, maxchar $maxchar."

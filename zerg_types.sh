@@ -3,49 +3,51 @@
 
 if ! [ $ZERG_SETUP ]; then
     echo "Source zerg_setup.sh first." >&2
-    return ZERR_UNDEF
+    return $ZERR_UNDEF
 fi
 
+zerg_ord() {
+    if [[ $1 == "-x" ]]; then
+        printf '%x\n' "'$2"
+    else
+        printf '%d\n' "'$1"
+    fi
+}
+
+zerg_chr() {
+    printf "\\U$(printf '%08x' $1)"
+}
+
 # Known argument types/forms (distinguishes string forms like hexint).
-# NOTE: I tried to generate a case pattern from this dynamically, but
-# the case statement appears not to allow the variable ref. So instead, run:
-#     echo ${(k)zerg_types} | sed 's/ /|--/g'
-# add "--" to the front, and paste it into the case in zerg_add literally.
-# Likewise for actions.
-#
-# TODO: See the help re. possible additions.
+# Some impose extra semantics, such as a pid or varname existing, or
+# an unsigned or logprob being in a given numeric range.
+# See the doc re. possible additions.
 #
 typeset -A zerg_types=(
-    [int]=int [hexint]=int [octint]=int [anyint]=int [pid]=int
-    [bool]=bool
-    [float]=float [prob]=float [logprob]=float [complex]=complex
+    [int]=int [hexint]=int [octint]=int [binint]=int [anyint]=int
+    [unsigned]=int [pid]=int [bool]=bool
+    [float]=float [prob]=float [logprob]=float [complex]=complex [tensor]=ndarray
     [str]=str [char]=str
-    [ident]=str [uident]=str [argname]=str [cmdname]=str [idents]=str [uidents]=str
+    [ident]=str [idents]=str [uident]=str [uidents]=str
+    [argname]=str [cmdname]=str [varname]=str [objname]=str [zergtypename]=str
     [regex]=str [path]=str [url]=str [lang]=str [encoding]=str [format]=str
     [time]=time [date]=date [datetime]=datetime
     [duration]=timedelta [epoch]=float
 )
+# turn that into 'case' expr --int|--hexint....
+zerg_types_exp=${(j:|:)${(k)zerg_actions}:gs/^/--/}
 
-is_type_name() {
-    local quiet
-    while [[ "$1" == -* ]]; do case "$1" in
-        (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: is_type_name name
-Test if the argument is a known zerg datatype name, namely:
-    ${(k)zerg_types}
-Returns: 0 if valid, 1 if not
-EOF
-            return ;;
-        -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
-      esac
-      shift
-    done
+zerg_unsigned_exp="[0-9]+"
+zerg_int_exp="[-+]?[0-9]+"
+zerg_oct_exp="0[Oo][0-7]*"
+zerg_hex_exp="0[Xx][0-9a-fA-F]+"
+zerg_bin_exp="0[Bb][01]+"
+zerg_float_exp="[-+]?[0-9]+(\\.?[0-9]+)?([eE][-+]?[0-9]+)?"
+zerg_complex_exp="${zerg_float_exp}(\+${zerg_float_exp}[ijIJ])?"
 
-    [[ " ${(k)zerg_types[@]} " =~ " $1 " ]] && return 0
-    [ $quiet ] || tMsg 0 "'$1' is not a recognized zerg type name."
-    return ZERR_ENUM
-}
+zerg_ident_exp="[a-zA-Z_][a-zA-Z0-9_]*"
+zerg_uident_exp="[_[:alpha:]][_[:alnum:]]*"
+zerg_argname_exp="(-[a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]+)"
 
 # Dispatcher function - calls the appropriate is_* function for a type
 is_of_zerg_type() {
@@ -60,19 +62,42 @@ EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
         *) tMsg 0 "Unrecognized option '$1'.";
-            return ZERR_BAD_OPTION ;;
+            return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    if ! is_type_name "$1"; then
+    if ! is_zergtypename "$1"; then
         tMsg 0 "'$1' is not a recognized zerg type name."
-        return ZERR_ENUM
+        return $ZERR_ENUM
     fi
-    local testName="is_${(L)1}"
-    $testName "$2"
+    local test_func="is_${(L)1}"
+    $test_func "$2"
     return $?
 }
+
+is_of_edda_class() {
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: is_of_edda_class classname varname
+    Check whether the named shell variable is of the given edda class.
+    That is, it must be an associative array, and contains an item with
+    whose name matches $EDDA_CLASS_KEY, and whose value is classname.
+Examples:
+    is_of_edda_class ZERG_PARSER myArgParser || return $?
+See also: edda_get_class.
+EOF
+            return ;;
+        -q|--quiet) quiet='-q';;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    local the_class=`edda_get_class "$2"` || return $?
+    [[ $the_class == "$1" ]] || return 1
+}
+
 
 zerg_ord() {
     if [[ $1 == "-x" ]]; then
@@ -84,6 +109,31 @@ zerg_ord() {
 
 zerg_chr() {
     printf "\\U$(printf '%08x' $1)"
+}
+
+
+###############################################################################
+#
+is_of_edda_class() {
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: is_of_edda_class classname varname
+    Check whether the named shell variable is of the given edda class.
+    That is, it must be an associative array, and contains an item with
+    whose name matches $EDDA_CLASS_KEY, and whose value is classname.
+Examples:
+    is_of_edda_class ZERG_PARSER myArgParser || return $?
+See also: edda_get_class.
+EOF
+            return ;;
+        -q|--quiet) quiet='-q';;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    local the_class=`edda_get_class "$2"` || return $?
+    [[ $the_class == "$1" ]] || return 1
 }
 
 
@@ -107,51 +157,97 @@ is_char() {
     local count=$(print -rn -- "$1" | wc -m | tr -d ' ')
     (( $count == 1 )) && return 0
     [ $quiet ] || tMsg 0 "'$1' is not a single character."
-    return ZERR_ZERG_TVALUE
+    return $ZERR_ZERG_TVALUE
 }
-
-# Identifier patterns
-ident_expr="[a-zA-Z_][a-zA-Z0-9_]*"
 
 is_ident() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if ! [[ "$1" =~ ^$ident_expr$ ]]; then
+    if ! [[ "$1" =~ ^$zerg_ident_exp$ ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not an identifier."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_idents() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if ! "$1" =~ ^$ident_expr( +$ident_expr)*$ ]]; then
+    if ! [[ "$1" =~ ^$zerg_ident_exp([[:space:]]+$zerg_ident_exp)*$ ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a space-separated identifier(s)."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
+    fi
+}
+
+is_uident() {
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    if ! [[ "$1" =~ ^$zerg_uident_exp$ ]]; then
+        [ $quiet ] || tMsg 0 "'$1' is not a Unicode identifier."
+        return $ZERR_ZERG_TVALUE
+    fi
+}
+
+is_uidents() {
+    local quiet="" ident_expr="[a-zA-Z_][a-zA-Z0-9_]*"
+    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    if ! [[ "$1" =~ ^$zerg_uident_exp([[:space:]]+$zerg_uident_exp)*$ ]]; then
+        [ $quiet ] || tMsg 0 "'$1' is not a space-separated Unicode identifier(s)."
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_argname() {
-    local argname_expr="--"
     # Test for a legit option/argument name: -c or --xx-yy...
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ -z "$1" ]] || ! [[ "$1" =~ ^(-[a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]+)$ ]]; then
-        [ $quiet ] || tMsg 0 "'$1' is not a valid option name."
-        return ZERR_ZERG_TVALUE
+    if [[ -z "$1" ]] || ! [[ "$1" =~ ^($zerg_argname_exp)$ ]]; then
+        [ $quiet ] || tMsg 0 "'$1' is not a valid --option-name."
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_cmdname() {
-    whence "$1" >&2
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    whence "$1" >/dev/null
+    if [[ $? -ne 0 ]]; then
+        [ $quiet ] || tMsg 0 "'$1' is not an available command-name."
+        return $ZERR_ZERG_TVALUE
+    fi
     return $@
+}
+
+# is_optname: See is_argname.
+
+is_varname() {
+    # Optional 2nd arg to check the zsh type of the shell variable.
+    # In that case existence check is not needed, as 'undef' is a type.
+    # To check just for being a possible variable name, use is_ident.
+    if [ -n "$2" ]; then
+        return sv_type "$2" "$1"
+    fi
+    return [ -v "$1" ]
+}
+
+is_objname() {
+    # Optional 2nd arg to check for a specific class.
+    # To check just for being a possible class name, use is_ident.
+    if [ -n "$2" ]; then
+        return is_of_edda_class "$2" "$1"
+    fi
+    return aa_has "$1" "$EDDA_CLASS_KEY"
+}
+
+is_zergtypename() {
+    aa_has -q zerg_types "$1"
+    return $?
 }
 
 check_re() {
     # Is this a legit regex?
     local regex="$1"
     echo "" | grep -E "$regex" 2>/dev/null
-    [[ $? == 0 ]] || [[ $? == 1 ]] || return ZERR_ZERG_TVALUE
+    [[ $? == 0 ]] || [[ $? == 1 ]] || return $ZERR_ZERG_TVALUE
 }
 
 is_regex() {
@@ -159,7 +255,7 @@ is_regex() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! check_re "$1"; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid regular expression."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -186,7 +282,7 @@ EOF
         -d|-e|-f|-r|-w|-x|-N) typeset $1[2:-1]=1 ;;
         --new|--forcible) typeset $1[3:-1]=1 ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -195,25 +291,25 @@ EOF
     local pathExpr="^/?[._\-$~#a-zA-Z0-9]*(/[._\-$~#a-zA-Z0-9]*)*$"
     if [[ ! "$1" =~ ($pathExpr) ]]; then
         [ $quiet ] || tMsg 0 "'$1' does not appear to be a valid path."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 
     for perm in d e f r w x N; do
         if [ ${(P)$perm} ] && ! [ -$perm "$pathExpr" ]; then
             [ $quiet ] || tMsg 0 "Path $pathExpr does not satisfy -$perm."
-            return ZERR_ZERG_TVALUE
+            return $ZERR_ZERG_TVALUE
         fi
     done
     if [ $new ] || [ $forcible ]; then
         local container="$pathExpr:h"
         if ! [ -d "$pathExpr:h" ]; then
             [ $quiet ] || tMsg 0 "Parent dir of path $pathExpr does not exist."
-            return ZERR_ZERG_TVALUE
+            return $ZERR_ZERG_TVALUE
         fi
         [ $forcible ] && [ -w "$pathExpr" ] && return 0
         [ $new ] && ! [ -e "$pathExpr" ] && return 0
         [ $quiet ] || tMsg 0 "Path $pathExpr does not satisfy --new or --forcible."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
     return 0
 }
@@ -225,7 +321,7 @@ is_url() {
     local expr="^[a-zA-Z][a-zA-Z0-9+.-]*:.+"
     if ! [[ "$1" =~ ($expr) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid url."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -234,7 +330,7 @@ is_lang() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! iconv -l | grep 'UTF-88' >/dev/null; then
         [ $quiet ] || tMsg 0 "'$1' is not a recognized encoding."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -243,7 +339,7 @@ is_encoding() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [[ ! "$1" =~ ^[a-zA-Z][a-zA-Z][a-zA-Z]?(-[a-zA-Z][a-zA-Z]*)* ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid language code."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -254,7 +350,7 @@ is_format() {
     expr+="[hlLqjzt]*[diouxXeEfFgGaAcspn%]"
     if [[ ! "$1" =~ ($expr) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid % format code."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -264,36 +360,45 @@ is_format() {
 is_int() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ ! "$1" =~ ^-?[0-9]+$ ]]; then
+    if [[ ! "$1" =~ (^${zerg_int_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid integer."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
+    fi
+}
+
+is_unsigned() {
+    local quiet=""
+    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    if [[ ! "$1" =~ (^${zerg_unsigned_exp}$) ]]; then
+        [ $quiet ] || tMsg 0 "'$1' is not a valid insigned integer."
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_octint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ ! "$1" =~ ^(0)?[0-7]+$ ]]; then
+    if [[ ! "$1" =~ (^${zerg_oct_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid octal integer."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_hexint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ ! "$1" =~ ^(0x)?[0-9a-fA-F]+$ ]]; then
+    if [[ ! "$1" =~ (^${zerg_hex_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid hexadecimal integer."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_binint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-   if [[ ! "$1" =~ ^(0b)?[01]+$ ]]; then
+   if [[ ! "$1" =~ (^${zerg_bin_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid binary integer."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -301,12 +406,11 @@ is_anyint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     # Try decimal, hex, octal, binary
-    if is_int -q "$1" || is_octint -q "$1" ||
-       [[ "$1" =~ ^0x[0-9a-fA-F]+$ ]] || [[ "$1" =~ ^0b[01]+$ ]]; then
+    if is_int -q "$1" || is_octint -q "$1" || is_hexint -q "$1" || is_binint -q "$1"; then
         return 0
     else
-        [ $quiet ] || tMsg 0 "'$1' is not a valid integer (decimal/hex/octal/binary)."
-        return ZERR_ZERG_TVALUE
+        [ $quiet ] || tMsg 0 "'$1' is not an integer (999/0xFF/07777/0B1011)."
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -322,23 +426,23 @@ EOF
             return ;;
         -a|--active) active=1 ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    if ! is_int "$1"; then
+    if ! is_unsigned - "$1"; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid process id number."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
     if ! ps -p "$1" >/dev/null; then
         [ $quiet ] || tMsg 0 "'$1' is not an active process."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
     if [[ -n $active ]]; then  # Test if we can signal it
         if ! kill -0 "$1" 2>/dev/null; then
             [ $quiet ] || tMsg 0 "Process '$1' exists but is not signalable."
-            return ZERR_ZERG_TVALUE
+            return $ZERR_ZERG_TVALUE
         fi
     fi
 }
@@ -346,21 +450,21 @@ EOF
 is_float() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ ! "$1" =~ ^-?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?$ ]]; then
+    if ! [[ "$1" =~ (^${zerg_float_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid float."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_prob() {
-    local quiet="" floatexpr="[0-9]*\\.?[0-9]+([eE][+-]?[0-9]+)?"
+    local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ ! "$1" =~ (^${floatexpr}$) ]]; then
+    if ! [[ "$1" =~ (^${zerg_float_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid probability."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     elif ! (( $(echo "$1 >= 0.0 && $1 <= 1.0" | bc -l) )); then
         [ $quiet ] || tMsg 0 "'$1' must be between 0.0 and 1.0."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -370,21 +474,57 @@ is_logprob() {
     # Log probability must be <= 0 (since log(p) where 0 < p <= 1)
     if ! is_float -q "$1"; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid float."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     elif ! (( $(echo "$1 <= 0.0" | bc -l) )); then
         [ $quiet ] || tMsg 0 "'$1' must be <= 0.0."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
 is_complex() {
-    local quiet="" floatexpr="[0-9]*\\.?[0-9]+([eE][+-]?[0-9]+)?"
+    local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if [[ ! "$1" =~ (^${floatexpr}(\+${floatexpr}[ij])?$) ]]; then
+    if ! [[ "$1" =~ (^${zerg_complex_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid complex."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
+
+is_tensor() {
+    # TODO Add shape checking
+    local quiet="" i depth=0
+    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    local -a items=${(z)1}
+    local -a current_sizes
+    local -i n=$#items
+    if [[ $items[1] != '(' ]] || [[ $items[-1] != ')' ]]; then
+        [ $quiet ] || tMsg 0 "Tensor not parenthesized '$1'."
+        return $ZERR_ZERG_TVALUE
+    fi
+    for (( i=1; i<=$#items; i++ )); do
+        local tok=$items[$i]
+        if [[ $tok == "(" ]]; then
+            depth+=1
+            current_sizes[$depth]=0
+        elif [[ $tok == ")" ]]; then
+            depth-=1
+            if (( $depth < 0 )); then
+                [ $quiet ] || tMsg 0 "Extra ')' at token $i of tensor."
+                return $ZERR_ZERG_TVALUE
+            fi
+        elif is_float $tok; then
+            current_sizes[$depth]+=1
+        else
+            [ $quiet ] || tMsg 0 "Unrecognized token '$tok' in tensor."
+            return $ZERR_ZERG_TVALUE
+        fi
+    done
+    if (( $depth != 0 )); then
+        [ $quiet ] || tMsg 0 "Imbalkanced parentheses in tensor."
+        return $ZERR_ZERG_TVALUE
+    fi
+}
+
 
 is_bool() {
     local quiet="" value abbrev_ok=""
@@ -413,7 +553,7 @@ EOF
         esac
     fi
     [ $quiet ] || tMsg 0 "'$value' is not a valid boolean."
-    return ZERR_ZERG_TVALUE
+    return $ZERR_ZERG_TVALUE
 }
 
 
@@ -424,7 +564,7 @@ EOF
 #     return 0
 # else
 #     tMsg error "Invalid date/time: $datestring"
-#     return ZERR_ZERG_TVALUE
+#     return $ZERR_ZERG_TVALUE
 # fi
 #
 is_time() {
@@ -433,7 +573,7 @@ is_time() {
     # Basic time format: HH:MM or HH:MM:SS
     if [[ ! "$1" =~ ^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$ ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid time (HH:MM or HH:MM:SS)."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -444,7 +584,7 @@ is_date() {
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%d" "$1" "+%s" &>/dev/null 2>&1; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid ISO8601 date."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -455,7 +595,7 @@ is_datetime() {
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%dT%H:%M:%S" "$1" "+%s" &>/dev/null 2>&1; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid ISO8601 datetime."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -465,7 +605,7 @@ is_duration() {
     # Simple duration: number followed by unit (s, m, h, d) TODO: beef it up.
     if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid duration (e.g., 5s, 2.5h, 3d)."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
 
@@ -475,9 +615,10 @@ is_epoch() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! is_float "$1"; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid epoch timestamp."
-        return ZERR_ZERG_TVALUE
+        return $ZERR_ZERG_TVALUE
     fi
 }
+
 
 # Warn if being run directly vs sourced
 if [[ "${ZSH_EVAL_CONTEXT}" == toplevel ]]; then

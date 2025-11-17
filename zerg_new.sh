@@ -6,7 +6,7 @@ _zerg_parser_init() {
     local priorType=`sv_type $parser_name`
     if [[ $priorType == ^(scalar|integer|float|array)$ ]]; then
         tMsg 0 "Cannot create zerg parser '$parser_name', variable already exists."
-        return ZERR_DUPLICATE
+        return $ZERR_DUPLICATE
     elif [[ $priorType == "assoc" ]]; then
         local disp=$(aa_get "$parser_name" "on_redefine")
         # TODO: When is option parsed???
@@ -19,18 +19,19 @@ _zerg_parser_init() {
             zerg_del "$parser_name"
         elif [[ $disp == error ]]; then
             tMsg 0 "Error: Parser '$parser_name' already exists."
-            return ZERR_DUPLICATE
+            return $ZERR_DUPLICATE
         else
             tMsg 0 "Unknown value '$disp' for --on-redefine."
-            return ZERR_ENUM
+            return $ZERR_ENUM
         fi
     fi
 
     # Create hidden parser assoc with default options, etc.
     typeset -ghA "$parser_name"
 
-    aa_set $parser_name "$ZERG_MAGIC_TYPE" "ZERG_PARSER"
+    aa_set $parser_name "$EDDA_CLASS_KEY" "ZERG_PARSER"
     aa_set $parser_name all_arg_names ""
+    aa_set $parser_name all_def_names ""
     aa_set $parser_name required_arg_names ""
 
     aa_set $parser_name add_help ""
@@ -88,12 +89,12 @@ These options of Python ArgumentParser are not (yet) supported:
   argument_default, conflict_handler, exit_on_error
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    req_argc 1 99 $# || return ZERR_ARGC
+    req_argc 1 99 $# || return $ZERR_ARGC
     local parser_name="$1"
     shift
 
@@ -111,19 +112,19 @@ EOF
             --no-allow-abbrev-choices|--no-abbrevc)
                 aa_set "$parser_name" "allow_abbrev_choices" "" ;;
             --description)
-                aa_set "$parser_name" "description" "$2" ; shift ;;
+                shift; aa_set "$parser_name" "description" "$1" ;;
             --description-paras|--dparas)
                 aa_set "$parser_name" "description_paras" 1 ;;
             --epilog)
-                aa_set "$parser_name" "epilog" "$2"; shift ;;
+                shift; aa_set "$parser_name" "epilog" "$1";;
             --export|-x)
-                aa_set "$parser_name" "export" 1; shift ;;
+                aa_set "$parser_name" "export" 1 ;;
             --no-export|--nx)
-                aa_set "$parser_name" "export" ""; shift ;;
+                aa_set "$parser_name" "export" "" ;;
             --help-file)
-                aa_set "$parser_name" "help_file" "$2"; shift ;;
+                shift; aa_set "$parser_name" "help_file" "$1" ;;
             --help-tool)
-                aa_set "$parser_name" "help_tool" "$2"; shift ;;
+                shift; aa_set "$parser_name" "help_tool" "$1" ;;
             --ignore-case-choices|--icc)
                 aa_set "$parser_name" "ignore_case_choices" 1 ;;
             --no-ignore-case-choices|--no-icc|--nicc)
@@ -138,18 +139,18 @@ EOF
             --no-ignore-hyphens|--no-ih|--nih)
                 aa_set "$parser_name" "ignore_hyphens" "" ;;
             --on-redefine|--redef)
-                aa_set "$parser_name" "on_redefine" "$2"; shift ;;
+                shift; aa_set "$parser_name" "on_redefine" "$1" ;;
             --usage)
                 aa_set "$parser_name" "usage" "" ;;
             --var-style|--vars)
-                if [[ "$2" != "separate" && "$2" != "assoc" ]]; then
+                shift
+                if [[ "$1" != "separate" && "$1" != "assoc" ]]; then
                     tMsg 0 "--var-style must be 'separate' or 'assoc'"
-                    return ZERR_ENUM
+                    return $ZERR_ENUM
                 fi
-                aa_set "$parser_name" "var_style" "$2"
-                shift ;;
+                aa_set "$parser_name" "var_style" "$1" ;;
             *)
-                tMsg 0 "Unknown option: $1"; return ZERR_BAD_OPTION ;;
+                tMsg 0 "Unknown option: $1"; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
@@ -169,16 +170,15 @@ Arguments that were re-used from another parser are not destroyed.
 
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    req_sv_type assoc "$1" || return ZERR_SV_TYPE
-
+    req_edda_class ZERG_PARSER "$1" || return $?
     for name in "${(P)1}[@]"; do
-        [[ $name =~ ^$1__ ]] || continue
-        [[ `sv_type $name` == "assoc" ]] && unset $name
+        [[ $name =~ ^--*$1 ]] || continue
+        req_edda_class ZERG_ARG_DEF "$name" && unset ${(P)1}
     done
     unset "$1"
 }
@@ -189,12 +189,12 @@ zerg_print() {
 Usage: zerg_print parser_name
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    req_sv_type assoc "$1" || return ZERR_SV_TYPE
+    req_edda_class ZERG_PARSER "$1" || return $?
     aa_export -f view "$1"
     local args=$(aa_get "$1" "$art_names_list")
     for arg in ${(zO)args}; do
@@ -206,7 +206,7 @@ zerg_to_argparse() {
     local sp="            "
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: zerg_to_argparse parserName
+Usage: zerg_to_argparse parser_name
 Writes out a zerg parser as roughly equivalent Python argparse calls.
 A few things don't quite transfer -- for example, zerg has quite a few more
 types, at least one more action, and added parser options.
@@ -214,12 +214,12 @@ TODO: Aliases are not yet included -- just the reference name.
 TODO: flag options (no value tokens following)
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return ZERR_BAD_OPTION ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    req_sv_type assoc "$1" || return ZERR_SV_TYPE
+    req_edda_class ZERG_PARSER "$1" || return $?
     local parser_name="$1"
 
     local -A notpython=(
@@ -237,21 +237,15 @@ EOF
     print "        )"
 
     # Collect an assoc of argdefname->optnames
-    local -A def_map
-    for arg in ${(pk)parser_name}; do
-        [[ $arg == -* ]] || continue
-        local def_name=`aa_get $parser_name "$arg"
-        local opt_names=`aa_get $def_name "arg_names"
-        def_map[$def_name]="$opt_names"
-    done
-    typeset -p def_map | sed 's/\[/\n  [/g'
-
-    for def_name in ${(ko)def_map}; do
+    local adf=`aa_get $parser_name all_def_names`
+    local -a all_def_names=(${(z)adf})
+    for def_name in ${(oz)all_def_names}s; do
+        tMsg 0 "Collecting, def_name '$def_name'."
         if ! [[ `sv_type $def_name` == assoc ]]; then
             tMsg 0 "Bad storage for argdef '$def_name'."
         else
-            local add_buf=`zerg_arg_to_add_argument $def_name "$def_map[$def_name]"`
-            print add_buf
+            local add_buf=`zerg_arg_to_add_argument $def_name`
+            print $add_buf
         fi
     done
 
@@ -260,12 +254,11 @@ EOF
 
 zerg_arg_to_add_argument() {
     local def_name="$1"
-    local -a ref_names=${=2}
-    local ref_name=$ref_names[1]
+    local aliases=`aa_get $def_name "arg_names"`
     local sp="            "
     local buf="${sp}parser.add_argument("
-    for name in $ref_names; do
-        buf+="\"$name\""
+    for name in ${(z)aliases}; do
+        buf+="\"$name\", "
     done
 
     for ao in type action default choices const dest nargs required help; do
