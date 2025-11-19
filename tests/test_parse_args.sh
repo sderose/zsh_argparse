@@ -16,7 +16,7 @@ source ../zerg_setup.sh
 if [[ `sv_type PARSER` != "undef" ]]; then
     tMsg 0 "'PARSER' already defined. Nuking it first."
     zerg_del "PARSER"
-    if [[ "$PARSER" ]] || [[ "$PARSER" ]]; then
+    if [[ "$PARSER" ]] || [[ "$PARSER__quiet" ]]; then
         tMsg 0 "zerg_del for PARSER assoc failed!"
         return
     else
@@ -25,17 +25,23 @@ if [[ `sv_type PARSER` != "undef" ]]; then
 fi
 
 tHead "Testing zerg_new"
-zerg_new PARSER --ignore-case --ignore-case-choices --description "descr text" --allow-abbrev --allow-abbrev-choices --epilog "Nevermore." --var-style assoc
+zerg_new PARSER --ignore-case --ignore-case-choices --description "A simple parser." --allow-abbrev --allow-abbrev-choices --epilog "Nevermore." --var-style assoc
 #aa_export -f view --sort PARSER
 
 tHead "Testing adds"
 zerg_add PARSER "--quiet -q --silent" --store-true --help "Less chatty."
 [ $? ] || tMsg 0 "zerg_add for PARSER --quiet failed."
-#tHead "After zerg_add:"
+zerg_add PARSER "--verbose -v" --action count --help "More chatty."
+[ $? ] || tMsg 0 "zerg_add for PARSER --verbose failed."
+zerg_add PARSER "--max" --int --default 999
+[ $? ] || tMsg 0 "zerg_add for PARSER --max failed."
+
+tHead "After zerg_adds:"
 #aa_export -f view --sort PARSER__quiet
+#aa_export -f view --sort PARSER__verbose
 
 tHead "Testing parse"
-zerg_parse PARSER --quiet hello.txt file2.txt
+zerg_parse PARSER --quiet -v -v hello.txt
 
 tHead "Results"
 aa_export -f view --sort PARSER__results

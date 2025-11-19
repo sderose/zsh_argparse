@@ -30,6 +30,7 @@ typeset -A zerg_types=(
     [str]=str [char]=str
     [ident]=str [idents]=str [uident]=str [uidents]=str
     [argname]=str [cmdname]=str [varname]=str [objname]=str [zergtypename]=str
+    [composite]=str
     [regex]=str [path]=str [url]=str [lang]=str [encoding]=str [format]=str
     [time]=time [date]=date [datetime]=datetime
     [duration]=timedelta [epoch]=float
@@ -76,16 +77,16 @@ EOF
     return $?
 }
 
-is_of_edda_class() {
+is_of_zerg_class() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: is_of_edda_class classname varname
-    Check whether the named shell variable is of the given edda class.
+Usage: is_of_zerg_class classname varname
+    Check whether the named shell variable is of the given zerg class.
     That is, it must be an associative array, and contains an item with
-    whose name matches $EDDA_CLASS_KEY, and whose value is classname.
+    whose name matches $ZERG_CLASS_KEY, and whose value is classname.
 Examples:
-    is_of_edda_class ZERG_PARSER myArgParser || return $?
-See also: edda_get_class.
+    is_of_zerg_class ZERG_PARSER myArgParser || return $?
+See also: zerg_get_class.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -94,36 +95,23 @@ EOF
       shift
     done
 
-    local the_class=`edda_get_class "$2"` || return $?
+    local the_class=`zerg_get_class "$2"` || return $?
     [[ $the_class == "$1" ]] || return 1
-}
-
-
-zerg_ord() {
-    if [[ $1 == "-x" ]]; then
-        printf '%x\n' "'$2"
-    else
-        printf '%d\n' "'$1"
-    fi
-}
-
-zerg_chr() {
-    printf "\\U$(printf '%08x' $1)"
 }
 
 
 ###############################################################################
 #
-is_of_edda_class() {
+is_of_zerg_class() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: is_of_edda_class classname varname
-    Check whether the named shell variable is of the given edda class.
+Usage: is_of_zerg_class classname varname
+    Check whether the named shell variable is of the given zerg class.
     That is, it must be an associative array, and contains an item with
-    whose name matches $EDDA_CLASS_KEY, and whose value is classname.
+    whose name matches $ZERG_CLASS_KEY, and whose value is classname.
 Examples:
-    is_of_edda_class ZERG_PARSER myArgParser || return $?
-See also: edda_get_class.
+    is_of_zerg_class ZERG_PARSER myArgParser || return $?
+See also: zerg_get_class.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -132,7 +120,7 @@ EOF
       shift
     done
 
-    local the_class=`edda_get_class "$2"` || return $?
+    local the_class=`zerg_get_class "$2"` || return $?
     [[ $the_class == "$1" ]] || return 1
 }
 
@@ -233,14 +221,23 @@ is_objname() {
     # Optional 2nd arg to check for a specific class.
     # To check just for being a possible class name, use is_ident.
     if [ -n "$2" ]; then
-        return is_of_edda_class "$2" "$1"
+        return is_of_zerg_class "$2" "$1"
     fi
-    return aa_has "$1" "$EDDA_CLASS_KEY"
+    return aa_has "$1" "$ZERG_CLASS_KEY"
 }
 
 is_zergtypename() {
     aa_has -q zerg_types "$1"
     return $?
+}
+
+is_composite() {
+    # The form used by typeset, for assignment and -p.'
+    # For example,  ([a]=1 [b]=2\ 3 [c]="foo")
+    ( typeset -a test="$value" ) 2>/dev/null && return 0
+    ( typeset -A test="$value" ) 2>/dev/null && return 0
+    ( typeset test="$value" ) 2>/dev/null && return 0
+    return $ZERR_ZERG_TVALUE
 }
 
 check_re() {
@@ -482,7 +479,7 @@ is_logprob() {
 }
 
 is_complex() {
-    local quiet=""
+    local quiet
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ (^${zerg_complex_exp}$) ]]; then
         [ $quiet ] || tMsg 0 "'$1' is not a valid complex."
@@ -491,10 +488,49 @@ is_complex() {
 }
 
 is_tensor() {
-    # TODO Add shape checking
-    local quiet="" i depth=0
-    [[ "$1" == "-q" ]] && quiet='-q' && shift
-    local -a items=${(z)1}
+    local quiet shape i depth=0
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: is_tensor [options] [data]
+    Tensor data must be a string of space-separated floats, possibly interspersed
+    with "(" and ")" to group it into dimensions. For example:
+        ( (1 2 3) (4 5 6) (7 8 9) )
+    The parentheses must balance, but sizes are only checked
+    if the --shape option is specified.
+Options:
+    --shape "...": If given, this option must have a value consisting of one
+        or more space-separated tokens, each either a positive integer or "*".
+Note: The --shape option is experimental. At each ")" found in the value, it
+    checks whether the number of floats seen in the ending () group was the same
+    as the value the option gave for that level of nested (), and complains
+    if it is not. If the option gave "*", any size is accepted. For example:
+        --shape "* 2"
+    would complain at the close parenthesis after "9" in:
+        "( ( 1 2 ) ( 3 4 ) ( 5 6 ) ( 7 8 9 )  (10 11) )
+EOF
+            return ;;
+        --shape) shift; shape="$1" ;;
+        -q|--quiet) quiet='-q' ;;
+        *) tMsg 0 "Unrecognized option '$1'.";
+            return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    if [ -n $shape ]; then
+        local -a dims=(${(z)shape})
+        local dim
+        for dim in $dims; do
+            is_int -q "$dim" && continue
+            [[ "$dim" == "*" ]] && continue
+            [ $quiet ] || tMsg 0 "Tensor shape '$shape' has bad dim '$dim'."
+            return $ZERR_ZERG_TVALUE
+        done
+    fi
+
+    local padded="$1:gs/(/ ( /"
+    padded="$padded:gs/)/ ) /"
+    local -a items=${(z)padded}
     local -a current_sizes
     local -i n=$#items
     if [[ $items[1] != '(' ]] || [[ $items[-1] != ')' ]]; then
@@ -507,6 +543,12 @@ is_tensor() {
             depth+=1
             current_sizes[$depth]=0
         elif [[ $tok == ")" ]]; then
+            if [ -n $dims[$depth] ] && [[ $dims[$depth] != "*" ]]; then
+                if (( current_sizes[$depth] != $dims[$depth] )); then
+                    [ $quiet ] || tMsg 0 "Dim $depth is length $current_sizes[$depth], not $dims[$depth] at token $i of tensor."
+                    return $ZERR_ZERG_TVALUE
+                fi
+            fi
             depth-=1
             if (( $depth < 0 )); then
                 [ $quiet ] || tMsg 0 "Extra ')' at token $i of tensor."
@@ -527,32 +569,40 @@ is_tensor() {
 
 
 is_bool() {
-    local quiet="" value abbrev_ok=""
-    if [[ "$1" == "-h" ]]; then
-        cat <<'EOF'
-Usage: is_bool [value] [alts?]
+    local quiet="" loose value abbrev_ok=""
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: is_bool [--loose] [value]
 Test whether the value is a recogized boolean.
-By default, only 1 for true and "" for 0.
-If alts is set, these are also accepted (ignoring case):
-    1 true yes on y
-    0 false no off n
-TODO Switch [alts] to be a real option.
+By default, only "" and 1 (including 01, etc) are accepted.
+Options:
+    --loose: If set, these are also accepted (ignoring case):
+        1 true yes on t y
+        0 false no off f n
+Note: By zsh rules every value is usable as a boolean, so there is no
+reason to check is_bool by those rules -- anything would return success.
 EOF
-        return
-    fi
-    [[ "$1" == "-q" ]] && quiet='-q' && shift
-    local value="$1" alts_ok="$2"
-    if [[ -z "$value" || "$value" == "1" ]]; then
+            return ;;
+        --loose) loose=1 ;;
+        -q|--quiet) quiet='-q' ;;
+        *) tMsg 0 "Unrecognized option '$1'.";
+            return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    local value="$1"
+    if [[ -z "$value" || "$value" -eq "1" ]]; then
         return 0
     fi
-    if [ $alts_ok ]; then
+    if [ $loose ]; then
         local lower_value="${value:l}"
         case "$lower_value" in
-            1|true|yes|on|y) return 0 ;;
-            0|false|no|off|n) return 0 ;;
+            1|true|yes|on|t|y) return 0 ;;
+            0|false|no|off|f|n) return 0 ;;
         esac
     fi
-    [ $quiet ] || tMsg 0 "'$value' is not a valid boolean."
+    [ $quiet ] || tMsg 0 "'$value' is not a boolean."
     return $ZERR_ZERG_TVALUE
 }
 

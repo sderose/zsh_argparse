@@ -50,7 +50,7 @@ _zerg_argdef_init() {
 
     # Create assoc to store the argdef, and apply defaults
     typeset -gHA $def_name
-    aa_set $def_name "$EDDA_CLASS_KEY" "ZERG_ARG_DEF"
+    aa_set $def_name "$ZERG_CLASS_KEY" "ZERG_ARG_DEF"
     aa_set $def_name action "store"
     aa_set $def_name arg_names "$arg_names"
     #aa_set $def_name const ""
@@ -100,7 +100,7 @@ EOF
     done
 
     req_argc 2 99 $# || return $ZERR_ARGC
-    req_edda_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
 
     # Process the parser name and quoted list of this arg's names/aliases
     local parser_name="$1"
@@ -118,7 +118,7 @@ EOF
     done
     local ref_name=$arg_names_list[1]
     local def_name="${parser_name}__"`zerg_opt_to_var "$ref_name"`
-    print "\nAliases '$arg_names', ref_name '$ref_name', def_name '$def_name'."
+    #print "\nAliases '$arg_names', ref_name '$ref_name', def_name '$def_name'."
     shift 2
 
     _zerg_argdef_init "$def_name" "$arg_names" || return $?
@@ -126,7 +126,7 @@ EOF
     # Parse options making up this argument definition
     while [[ $# -gt 0 ]]; do
         local name=`zerg_opt_to_var "$1"`
-        tMsg 0 "Arg '$1' (->$name)."
+        #tMsg 0 "Arg '$1' (->$name)."
         case "$1:l" in
             --type|-t)
                 shift
@@ -137,7 +137,7 @@ EOF
             --action|-a)
                 shift
                 name=`zerg_opt_to_var "$1"`
-                echo "Action '$name' for $def_name."
+                #tMsg 0 "Action '$name' for $def_name."
                 aa_has zerg_actions "$name" || return $ZERR_ENUM
                 aa_set $def_name action "$name" ;;
 
@@ -245,8 +245,8 @@ EOF
     [ $required ] && aa_append_value "$parser_name" "required_arg_names" "$ref_name "
 
     #tHead "parser and argdef before zerg_add returns: "
-    aa_export -f view --sort $parser_name
-    aa_export -f view --sort $def_name
+    #aa_export -f view --sort $parser_name
+    #aa_export -f view --sort $def_name
     return 0
 }
 
@@ -272,8 +272,8 @@ EOF
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_edda_class ZERG_PARSER "$1" || return $?
-    req_edda_class ZERG_PARSER "$2" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$2" || return $?
     local -a parent_def_names=(${(z)${${(P)2}[all_def_names]}})
     for def_name in parent_def_names; do
         zerg_use $1 $def_name
@@ -302,13 +302,13 @@ EOF
     done
 
     req_argc 2 99 $# || return $ZERR_ARGC
-    req_edda_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
     local parser_name=$1
     shift
 
     tMsg 0 "zerg_use not yet fully supported."
     while [ -n "$1" ]; do
-        req_edda_class ZERG_ARG_DEF "$1" || return $?
+        req_zerg_class ZERG_ARG_DEF "$1" || return $?
         local arg_names=`aa_get $1 "arg_names"`
         aa_append_value "$parser_name" "all_arg_names" "$arg_names "
         local req=`aa_get $1 "required"`

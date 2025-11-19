@@ -22,84 +22,107 @@ with or without zerg's argparse-like features.
 
 ===Example===
 
-Do this first (say, from your [.zshrc] or similar file)
+Argument parsing code typically goes at the top of a shell function definition.
+Most of the options, constants, etc. are named the same as in Python `argparse`,
+and work basically the same (there are some differences; see [zerg_new.md],
+[zerg_parse.md], etc. for details).
+
+zerg creates shell variable(s) for the parser itself, each distinct argument,
+and for results. These set zsh's "hidden" flag, so they
+won't show up in a generic list of variables (such as from just `typeset -p`).
+
+1: Do this first (say, from your [.zshrc] or similar file)
 to set up zerg as a whole (see [zerg_setup.md] for details):
+This defines common functions and variables, such as standard error codes,
+messaging functions, etc. and then source the remaining files.
 
 ```
     source 'zerg_setup.sh'
 ```
 
-This will define common functions and variables, such as standard error codes,
-messaging functions, etc. and then source the remaining files.
-
-Then create a named parser, a set of argument definitions, and finally
-parse your arguments. Like this:
+2: Create a named parser. This creates an associative array with
+that name, which "is" the parser. Be careful not to tromp on other variables.
+For example, you shouldn't name a parser "PATH" or "EDITOR" or other names
+predictably used by other programs.
 
 ```
     zerg_new MYPARSER
+```
 
+To see the result, you can do something like:
+    typeset -p MYPARSER
+  or
+    aa_export -f view MYPARSER
+
+3: Add argument definitions as illustrated below. The *first* argument after
+the parser name is special: It must be a space-separated (and typically quoted)
+list of names for the argument being defined. This is slightly different from
+Python `argparse`, for which each synonym/alias is given separately. You may
+want to always quote this argument, to be most readable:
+
+```
     zerg_add MYPARSER "--quiet -q" --action store_true --help "Less messages."
+    zerg_add MYPARSER "--verbose -v" --action count --help "More messages."
     zerg_add MYPARSER "--encoding" --type ident --default 'utf-8'
         --help "Charset to use."
     ...
-
-    zerg_parse MYPARSER "$@"
-
-    [ $quiet ] || echo "Hi, I'm starting up."
-    ...
 ```
 
-The resulting values by default go into variables named the same as their
-reference name. It seems to be hard to make those local to your function
-that is calling zerg, so they are exported/global. They also use the zsh
-hidden flag so they don't show up in a generic list of variable (such as
-from just `typeset -p`).
+4: Apply the parser to the actual arguments. The resulting values are stored
+in an associative array named for your parser name plus "__results",
+or in separate variables named for each option (choose which way by
+using the `--var_style` option on `parse_new`).
+Errors such as unrecognized option or a value not matching what's required
+for a given option, are reported, and cause `zerg_parse` to return a
+non-zero return code, which you may use to exit your function as shown.
 
-Be careful not to tromp on other variables. For example, you shouldn't name
-a parser "PATH".
+```
+    zerg_parse MYPARSER "$@" || return $?
+```
 
-This code would typically go at the top of your own shell function definition.
-Most of the options, constants, etc. are named the same as in Python `argparse`.
-The set of types includes many common basic ones as in Python
-argparse, but has additions for convenience.
+5: Then go on with your shell function, using the arguments as needed:
 
-I don't think Python `argparse` is perfect, but it's
-pretty capable and its popularity means modeling this directly on it lets
-many users re-apply knowledge of names, behaviors, etc. in either direction.
+    [ $MYPARSER__quiet ] ||  echo "Hi, I'm starting up."
+  or
+    [ $quiet ] || echo "Hi, I'm starting up."
 
-There is also a function included (`zerg_to_argparse`) that converts a zerg
-parser definition to corresponding Python.
+6: If desired, you can dispose of the parser with:
+
+```
+    zerg_unset MYPARSER
+```
 
 
 ==Parser storage==
 
-A parser is stored in a zsh associative array with the given name
-(`MYPARSER` in this example). These are created as global (-x)
+A parser is stored as a zsh associative array with the given name
+(`MYPARSER` in the example above). These are created as global (-x)
 and hidden (-H). The associative array has 4 kinds of entries:
 
 * An item identifying that the assoc represents zerg parser, under
-a constant key available in `$EDDA_CLASS_KEY` (from [edda_classes.sh]).
+a constant key available in `$ZERG_CLASS_KEY` (from [zerg_obects.sh]).
+The value is ZERG_PARSER.
 The first character is U+EDDA, a private-use Unicode character.
-* Parser-level options (such as`ignore-case`) are stored in the parser assoc,
-under their names not including leading hyphens)
+* Parser-level options (such as`--ignore-case`) are stored in the parser assoc,
+under their names converted by removing leading hyphens and converting others
+to underscores; similar to what Python does for storing argument values.)
 * Arguments added to the parser have all their names as items in the parser assoc
 (including
 hyphens), and each one's value is the name of a different associative array,
-where that argument's
-definition is stored. That array's name consists of the name of the parser
+where that argument's definition is stored.
+That array's name consists of the name of the parser
 that defined it, "__", and the argument's reference (first) name. For example,
 the definition of the "quiet" option for MYPARSER would be stored in
 MYPARSER__quiet. The name does not include leading hyphens, and any
 internal hyphens are changed to "_".
-* Reserved entries for space-separated lists of attribute names
-including their hyphens (to ease later checking): one for
-all the arguments' reference names, and one for all *required attributes*.
+* Reserved entries for space-separated lists of all attribute names;
+for all the assocs for argument definitions, and for all required arguments.
 
 An example is shown below, with the types of entries
-separated by blank lines for readability:
+grouped for readability:
 
 MYPARSER=(
-    [\uEDDA.TYPE]=ZERG_PARSER
+    [\uEDDA_CLASS]=ZERG_PARSER
 
     [add_help]=''
     [allow_abbrev]=1
@@ -122,24 +145,31 @@ MYPARSER=(
     [-i]=MYPARSER__i
     [-v]=MYPARSER__verbose
 
-    [all_arg_names]='--quiet --verbose -i -v --ignore-case'
+    [all_arg_names]='--quiet --verbose -v --ignore-case -i '
+    [all_def_names]='PARSER__quiet PARSER__verbose PARSER__ignore_case '
     [required_arg_names]=''
 )
 
 ==Argument definition storage==
 
-You add arguments with `zerg_add`, which is very like Python's
-`parser.add_argument()`. You can just define arguments at the top of
-a shell function as shown below. Or you can re-use arguments from a
-previously-defined parser via `zerg_use` (zerg includes a parser named `ZERG`,
-which provides several commplace option definitions such as quiet, verbose,
-encoding, recursive, etc.
+You add arguments with `zerg_add`, which as mentioned is very like Python's
+`parser.add_argument()`.
 
+There are many more options for built-in types (see [zerg_types.md] for
+details, or examine the actual list with `typeset -p zerg_types`. Most of these
+just care what a string looks like (say, `int` consisting of just digits and
+a possible leading sign, or `hexint` consisting of hexadecimal digits). But
+some also have special semantics, such as `varname`, `zergtypename`,
+and `pid` (which must exist).
+A few offer sub-types, such as `path` which can be qualified by
+permissions or other features. Every type has a test function, named
+the same as the type but with "is_" on the front: is_complex, is_date, etc.
 
 Command-line options do not all require a value in either Python or zsh. Those
-that do not, get a value that depends on `--default` or `--action` just like
-in Python `argparse`. True is stored as '1', and false as ''. Items whose
-value is '' (or false, which is stored as ''), may be omitted:
+that do not are commonly called "flag options", and get a value that
+depends on `--default` or `--action`, just like in Python `argparse`.
+True is stored as '1', and false as ''. Items whose
+value is '' (or false, which is stored as ''), may be omitted.
 
 MYPARSER__quiet=(
     [action]=store_true
@@ -147,7 +177,7 @@ MYPARSER__quiet=(
 )
 
 
-==Example==
+==Another Example==
 
 ```
 myFunction() {

@@ -6,21 +6,21 @@ which that object belongs.
 This is mainly useful so you can trivially identify such objects.
 
 The magic key name is U+EDDA plus "_CLASS". It is available in variable
-`$EDDA_CLASS_KEY`, or you can
-set/get it using `edda_set_class` and `edda_get_class`.
+`$ZERG_CLASS_KEY`, or you can
+set/get it using `zerg_set_class` and `zerg_get_class`.
 
 Much like for zsh and zerg types, you can test whether a particular variable
 is of a given object class:
     is_of_sv_type assoc myVar
     is_of_zerg_type path -w myVar
-    is_of_edda_class PARSER myVar
+    is_of_zerg_class PARSER myVar
 
 Zerg does not impose any requirements for objects beyond that.
 However, by convention:
 
 * class names should be all upper case
 * any keys beginning with the character U+EDDA (available as $'\uEDDA' or
-in `$EDDA_CHAR` are reserved for use by zerg (that should rarely be a pain).
+in `$ZERG_CLASS_CHAR` are reserved for use by zerg (that should rarely be a pain).
 
 zsh itself does not do anything special for "magic" items. If you
 view or retrieve items from an assoc, they are just items like any
@@ -33,7 +33,8 @@ might expect, the class definition
 
     * is another zerg object
     * is of class 'CLASS_DEF'
-    * is named `__ZERG__` plus the classname.
+    * is conventionally named `__CLASS__` plus the classname  (this is not required,
+      but is probably useful for clarity).
 
 A class definition contains an item for each permitted key, named the same
 as the item it constrains.

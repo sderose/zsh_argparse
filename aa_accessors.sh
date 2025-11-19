@@ -163,17 +163,17 @@ aa_len() {  # TODO rename sv?
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_len varname
-    Return the number of items in the variable
+    Echo the number of items in the variable.
 Note: This can be used on any type, not just associative arrays.
     It is just here for convenience, and it works the same as zsh's
     built-in ${(P)#varname}. That means that
     what it returns is different for different zsh types:
-* arrays (-a): the number of items
-* associative arrays (-A): the number of items
-* strings: the length in characters
-* ints (-i): the number of decimal digits (no leading zeros)
-* floats (-F): apparently the length of the decimal expansion
-* undefined: display nothing, return code 0
+    * arrays (-a): the number of items
+    * associative arrays (-A): the number of items
+    * strings: the length in characters
+    * ints (-i): the number of decimal digits (no leading zeros)
+    * floats (-F): apparently the length of the decimal expansion
+    * undefined: display nothing, return code 0
 EOF
             return ;;
         *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
@@ -344,28 +344,33 @@ alias aa_del=aa_unset
 # Extractors: keys, values, export
 #
 aa_keys() {
+    local sort
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_keys assoc_name [target_assoc]
     Get all keys from a named associative assoc.
     If target_assoc is provided, store keys in that assoc.
     Otherwise, print a space-separated list of keys.
+Option: --sort.
 Note: Keys containing spaces will be properly quoted.
-TODO: Add sort option(s)?
 EOF
                 return ;;
+            --sort) sort=1 ;;
             *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 1 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_sv_type assoc "$1" assoc "$2" || return $ZERR_SV_TYPE
     local assoc_name="$1" target_assoc="$2"
 
-    local -a keys=(${(k)${(P)assoc_name}})
+    if [ $sort ]; then
+        local -a keys=(${(ko)${(P)assoc_name}})
+    else
+        local -a keys=(${(k)${(P)assoc_name}})
+    fi
 
-    #echo "keys:  $keys[@]"
     if [[ -n "$target_assoc" ]]; then
         #tMsg 0 "Evaluating 2: typeset -ga $target_assoc=($keys[@])"
         eval "typeset -ga $target_assoc=($keys[@])"
@@ -375,15 +380,18 @@ EOF
 }
 
 aa_values() {
+    local sort
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_values assoc_name [target_assoc]
     Get all values from a named associative array.
     If target_assoc is provided, store values in that assoc.
     Otherwise, print a space-separated list of values to stdout.
+Option: --sort.
 Note: Values containing spaces will be properly quoted.
 EOF
                 return ;;
+            --sort) sort=1 ;;
             *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
@@ -393,11 +401,13 @@ EOF
     req_sv_type assoc "$1" || return $ZERR_SV_TYPE
     local assoc_name="$1" target_assoc="$2"
 
-    local -a values
-    values=(${(v)${(P)assoc_name}})
+    if [ $sort ]; then
+        local -a values=(${(vo)${(P)assoc_name}})
+    else
+        local -a values=(${(v)${(P)assoc_name}})
+    fi
 
     if [[ -n "$target_assoc" ]]; then
-        #tMsg 0 "Evaluating 3: ${target_assoc}=(\${values[@]})"
         eval "${target_assoc}=(\${values[@]})"
     else
         printf '%q ' "${values[@]}"
@@ -405,26 +415,26 @@ EOF
 }
 
 aa_export() {
-    local format="python" lines="" no_nil="" quiet="" sort=""
+    local format="view" lines="" no_nil="" quiet="" sort=""
     local -i width=20
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_export [options] assoc_name
 Export an associative array to various formats.
 Options:
-    -f|--format: What form to export to. Default: python
+    -f|--format: What form to export to. Default: "view"
     --lines: Pretty-print with newlines
     --no-nil: Do not include items with value ''
     -q|--quiet: Suppress messages
     --sort: Alphabetize items
     --width N: Allow this many columns for keys
 Formats:
+  view: pretty-printed (the default)
   htmltable: HTML table with key/value columns
   htmldl: HTML definition list
   python: Python dict syntax: {"key": "value", ...}
   json: JSON object syntax: {"key": "value", ...}
   zsh: zsh (qq)) format: ( [key]=value [key2]=value2 )
-  view: pretty-printed
 TODO: Add quoting options.
 EOF
                 return ;;
@@ -452,6 +462,14 @@ EOF
     fi
     local key
     case "$format" in
+        view)
+            print "assoc '$1':$lb"
+            for key in $keySeq; do
+                local val=$(aa_get -q "$1" "$key")
+                [[ -z "$val" || "$val" == *\ * ]] && val="\"$val\""
+                [ -z "$val" ] && [ $no_nil ] && continue
+                printf "  %-$width""s  %s\n" ${(q)key} $val
+            done;;
         htmltable)
             print -n "<table id=\"$1\">$lb"
             print -n "$ind<thead><tr><th>Key</th><th>Value</th></tr></thead>$lb"
@@ -509,14 +527,6 @@ EOF
                 print -n "$lb$ind""[${(q)key}]=${(q)val} "
             done
             print -n "$lb)$lb" ;;
-        view)
-            print "assoc '$1':$lb"
-            for key in $keySeq; do
-                local val=$(aa_get -q "$1" "$key")
-                [[ -z "$val" || "$val" == *\ * ]] && val="\"$val\""
-                [ -z "$val" ] && [ $no_nil ] && continue
-                printf "  %-$width""s  %s\n" ${(q)key} $val
-            done;;
         *)
             tMsg 0 "Unknown format '$format'"
             return $ZERR_BAD_OPTION ;;

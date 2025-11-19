@@ -29,7 +29,7 @@ _zerg_parser_init() {
     # Create hidden parser assoc with default options, etc.
     typeset -ghA "$parser_name"
 
-    aa_set $parser_name "$EDDA_CLASS_KEY" "ZERG_PARSER"
+    aa_set $parser_name "$ZERG_CLASS_KEY" "ZERG_PARSER"
     aa_set $parser_name all_arg_names ""
     aa_set $parser_name all_def_names ""
     aa_set $parser_name required_arg_names ""
@@ -175,10 +175,12 @@ EOF
       shift
     done
 
-    req_edda_class ZERG_PARSER "$1" || return $?
-    for name in "${(P)1}[@]"; do
-        [[ $name =~ ^--*$1 ]] || continue
-        req_edda_class ZERG_ARG_DEF "$name" && unset ${(P)1}
+    req_zerg_class ZERG_PARSER "$1" || return $?
+    local def_names=`aa_get "$1" all_def_names`
+    for def_name in ${(z)def_names}; do
+        #tMsg 0 "Deleting '$def_name'."
+        #req_zerg_class ZERG_ARG_DEF "$name" &&
+        unset $def_name
     done
     unset "$1"
 }
@@ -194,7 +196,7 @@ EOF
       shift
     done
 
-    req_edda_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
     aa_export -f view "$1"
     local args=$(aa_get "$1" "$art_names_list")
     for arg in ${(zO)args}; do
@@ -219,7 +221,7 @@ EOF
       shift
     done
 
-    req_edda_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
     local parser_name="$1"
 
     local -A notpython=(

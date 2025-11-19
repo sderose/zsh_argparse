@@ -1,66 +1,56 @@
 ==TODO list for zerg==
 
-* finish --version
-
-* finish --nargs REMAINDER
-
-* Unify type system across sv type, zerg type, and edda class.
-    * zerg types are all strings, with regex, some w/ semantics
-    * edda class objects are all assocs, with a reserved classname item
-    * zsh types are built in
-    * rename sv_type to zsh_type; edda_class to zerg_class, zerg_types to lextype?
-    * zerg_int vs. sv integer
-
-* Lose all the req_xxx functions?
-
-* Upgrade req_ thing that takes multiple types and test against $*.
-varname should be able to distinguish sv_types; maybe varname.svtype?
-
-* `zerg_to_argparse`: Include aliases, something for flag options
-
-* Allow dcls for positional args? In that case, rename all the
-parser option items in the parser assoc so they can't collide with plain
-names. Maybe start with ^ (to suggest top-level?)
-
-* Sort option to _keys and _values functions
+* rename sv_type to zsh_type; zerg_types to lextype?
 
 * Trigger `usage` display on certain errors
 
 * Avoid redundant usage info for negated options
 
-* Option to add `choices` to usage output
-
 * zsh autocomplete file generation?
 probably just add a 'zsh-completion' option to `zerg_add`, used only for this.
 
-* Finish support for short option bundling, and make it optional
+* zerg_new should clean up if it dies mid-construction
 
-* Allow changing the negation prefix?
+* Add functions to pack/unpack composites
 
-* Add exports to zsh case form
-For case form, maybe offer to expand matching for abbrs,
-like (-h|-he|-hel|-help)....
+* Enhance req_zerg_type and is_objname to take specific class as suffix:
+`req_zerg_type object.PARSER x`. Rename objname to just "object"?
 
-* req_arg_types (which probably requires adding varname subtypes, edda type
-varname.assoc.PARSER ('varname'->'ref'? 'assoc*'?)
 
-* Ability to store/retrieve qq form
+===Compatibility===
 
-* Implement `ignore-hyphens` parser option
+* `zerg_to_argparse`: Include aliases, something for flag options
 
-* Support keep-blank-lines for help descriptions
+* finish --version
 
-* zerg_new should clean up if it dies mid-construction.
+* finish --nargs REMAINDER
 
-* Packed type for values that should be treated as a typeset dcl on retrieval,
-e.g. parsed as a (...) array or assoc, or maybe all the other options too.
+* Allow dcls for positional args? In that case, rename their
+parser option items in the parser assoc so they can't collide with plain
+names.
+
+* Option to add `choices` to usage output
+
+* Finish support for short option bundling (optional)
+
+* Maybe add `prefix_chars` (e.g. for "+")
 
 
 ===Low priority===
 
+* Support keep-blank-lines for help descriptions
+
+* Implement `ignore-hyphens` parser option
+
+* Add export to zsh case form
+For case form, maybe offer to expand matching for abbrs,
+like (-h|-he|-hel|-help)....
+
+* Allow changing the negation prefix?
+
 * Support `quoting` setting for `sv_quote` and `aa_export`
 
-* aa-get option to parse and/or store?
+* aa-get option to store vs. parse?
 
 * Finish `set_symmdiff`, rest of str functions
 
@@ -72,20 +62,20 @@ e.g. parsed as a (...) array or assoc, or maybe all the other options too.
 
 * Add array-to-assoc conversion
 
-* Maybe just make zerg_type a type named type?
-
-* types: See also [zerg_types.md]. tensor shape support.
+* Potential types:
+    * tensor shape support
+    * [units] such as for *nix `units` command
+    * [glob]
+    * [function] -- the name of an existing shell functions
+    * [alias]
+    * [host] numeric vs. named?
+    * [user] numeric vs named
+    * [group] numeric vs named
+    * xsd types? date portions, pos/neg/nonpos int
+    * locale for date types?
 
 * Maybe add `is_path` tests like [ugo][rwx], tests for fifos, whiteouts, etc.
 
 * Add `--format` support?
 
-* Maybe extend date types to support locale and/or strftime %-strings?
-
-* Maybe add `prefix_chars` (e.g. for "+")
-
-* Should int allow like 1E8? Need unsigned?
-
 * Should aa_get offer choice of q/qq/qqq/qqqq and 'quoting'?
-
-* Should the list of sv_types be itself a zerg type?

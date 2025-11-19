@@ -82,7 +82,7 @@ _zerg_check_type() {
 #
 _zerg_help() {
     # TODO Implement description_breaks. wrap via fmt?
-    req_edda_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
     local help_file="${${(P)1}[help_file]}"
     if [ $help_file ]; then
         if ! [ -f "$help_file" ]; then
@@ -99,8 +99,8 @@ _zerg_help() {
 }
 
 _zerg_version() {
-    req_edda_class ZERG_PARSER "$1" || return $?
-    req_edda_class ZERG_ARG_DEF "${1}__version" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_ARG_DEF "${1}__version" || return $?
     print "Version = "`aa_get "$1" "${1}__version"`
 }
 
@@ -136,25 +136,24 @@ _zerg_store_value() {
 }
 
 _zerg_process_option() {
+    tHead "Processing option '$3'."
     # Process an option that takes a value (cover nargs, actions, etc.)
-    local parser_name="$1" def_name="$2" opt_name="$3"
-    index_ref="$5"
+    local parser_name="$1" def_name="$2" opt_name="$3" index_ref="$4"
+    req_zerg_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_ARG_DEF "$2" || return $?
+    req_zerg_type argname "$3" || return $?
+    req_zerg_type int "$4" || return $?
+    req_sv_type array cmdline_args || return $?
 
-    req_edda_class ZERG_PARSER "$1" || return $?
-    req_edda_class ZERG_ARG_DEF "$2" || return $?
-    is_argname "$3" || return $?
-    req_edda_class ZERG_PARSER cmdline_args || return $?
-
-    tMsg 0 "def_name '$def_name' opt_name '$opt_name', cmdline_args '$cmdline_args', index_ref '$index_ref'."
+    #tMsg 0 "def_name '$def_name' opt_name '$opt_name', cmdline_args '$cmdline_args', index_ref '$index_ref'."
 
     # Gather info on where to store option value
     local action=$(aa_get -q "$def_name" "action")
     local var_style=$(aa_get -q "$parser_name" "var_style")
     [ "$var_style" ] && var_style="separate"
     local result_dict_name="${parser_name}__results"
-    local dest=$(aa_get -q "$def_name" "dest")
-    [ -n dest ] || dest=$def_name[$#parser_name+2:-1]
-    tMsg 0 "action '$action', dest '$dest'."
+    local dest=`_zerg_find_dest $def_name`
+    #tMsg 0 "####### def_name '$def_name', option '$opt_name', action '$action', dest '$dest'."
 
     case "$action" in
         store_true)
@@ -175,7 +174,8 @@ _zerg_process_option() {
                 val="${(P)dest}"
             fi
             val+=1
-            _zerg_store_value $var_style $result_dict_name $dest "$val"
+            tMsg 0 "calling _zerg_store_value '$var_style' '$result_dict_name' '$dest' '$val'."
+            _zerg_store_value "$var_style" "$result_dict_name" "$dest" "$val"
             return 0 ;;
         toggle)  # Special for --foo / --no-foo pairs
             local val
@@ -263,7 +263,7 @@ _zerg_collectArgs() {
 _zerg_check_arg_values() {
     # Validate value choices, pattern, and type
     local def_name=$1
-    req_edda_class ZERG_ARG_DEF "$def_name" || return $?
+    req_zerg_class ZERG_ARG_DEF "$def_name" || return $?
     sv_type array $values || return $?
 
     local fold=$(aa_get -q --default "" "$def_name" "fold")
@@ -294,10 +294,10 @@ _zerg_check_arg_values() {
 
 _zerg_store_arg_values() {  # TODO result_dict_name
     local def_name=$1
-    req_edda_class ZERG_ARG_DEF "$def_name" || return $?
+    req_zerg_class ZERG_ARG_DEF "$def_name" || return $?
     sv_type array $values || return $?
     local action=$(aa_get -q --default "" "$def_name" "action")
-    local dest=$(aa_get -q --default "" "$def_name" "dest")
+    local dest=`_zerg_find_dest $def_name`
     local var_style=$(aa_get -q --default "" "$def_name" "var_style")
 
     case "$action" in
@@ -400,9 +400,9 @@ EOF
         return $ZERR_UNDEF
     fi
 
-    tMsg 0 "Args as is: '$@'."
+    #tMsg 0 "Args as is: '$@'."
     local -a cmdline_args=("$@")  # Inherits to called functions!
-    tMsg 0 "Tokens to parse: $cmdline_args."
+    #tMsg 0 "Tokens to parse: $cmdline_args."
 
     # Initialize result storage
     if [[ "$var_style" == "assoc" ]]; then
@@ -417,11 +417,11 @@ EOF
     for def_name in "${(z)all_def_names}"; do
         #tMsg 0 "    def_name: '$def_name'."
         local default_val=$(aa_get -q "$def_name" "default")
-        local dest=$(aa_get -q "$def_name" "dest")
+        local dest=`_zerg_find_dest $def_name`
 
         if [[ -n "$default_val" && -n "$dest" ]]; then
             if [[ "$var_style" == "assoc" ]]; then
-                aa_set "${parser_name}__results" "$dest" "$default_val"
+                aa_set $result_dict_name "$dest" "$default_val"
             else
                 typeset "$dest"="$default_val"
             fi
@@ -450,17 +450,17 @@ EOF
                 # Long option
                 local opt_name="$arg"
                 local def_name=`_zerg_find_arg_def $parser_name $opt_name $ic $abbr`
-                tMsg 0 " rc $?, Argdef at '$def_name'."
+                #tMsg 0 " rc $?, Argdef at '$def_name'."
                 if [ -z $def_name ]; then
                     tMsg 0 "Failed _zerg_find_arg_def."
                     return $ZERR_BAD_OPTION
                 fi
-                tMsg 0 "  option '$arg', def_name '$def_name', opt_name '$opt_name'."
+                #tMsg 0 "  option '$arg', def_name '$def_name', opt_name '$opt_name'."
                 if ! _zerg_process_option "$parser_name" "$def_name" "$opt_name"  $i; then
                     return 89  # TODO
                 fi
                 # Mark as provided ???
-                local dest=$(aa_get -q "$def_name" "dest")
+                local dest=`_zerg_find_dest $def_name`
                 [[ -n "$dest" ]] && provided_dests["$dest"]=1 ;;
             -*)
                 # Short option(s)
@@ -472,36 +472,35 @@ EOF
                     local def_name=""
                     local def_name=$(_zerg_find_arg_def $parser_name $short_opt $ic $abbr)
                     if [ -z $def_name ]; then
-                        tMsg "Could not find arg def for short opt $short_opt."
+                        tMsg 0 "Could not find arg def for short opt $short_opt."
                         return $ZERR_BAD_OPTION
                     fi
 
                     # Check if this is the last option in the bundle
                     if [[ $j -eq ${#opt_string} ]]; then # Last can take values
                         _zerg_process_option "$parser_name" "$def_name" "$short_opt" $i || return $?
-                        fi
-                    else  # Middle options must be flags
+                    else  # Non-last options must be flags
                         _zerg_process_flag_option "$parser_name" "$matched_def" "$short_opt" || return $?
-                        fi
                     fi
 
                     # Mark as provided
-                    local dest=$(aa_get -q "$matched_def" "dest")
+                    local dest=`_zerg_find_dest $def_name`
                     [[ -n "$dest" ]] && provided_dests["$dest"]=1
 
                     (( j++ ))
                 done ;;
-            *) positional_args+=("$arg") ;;
+            *) break;  # positional_args+=("$arg") ;;
         esac
         (( i++ ))
     done
 
     # Check for missing required arguments
-    #tMsg 0 "Checking for required dests: $required_dests."
-    for req_dest in "${required_dests[@]}"; do
-        [ -z $req_dest ] && continue
-        if [[ -z "${provided_dests[$req_dest]}" ]]; then
-            [ $quiet ] || tMsg 0 "Missing required argument: '$req_dest'"
+    tMsg 0 "Checking for required dests (TODO)"
+    local reqs=`aa_get $parser_name required_arg_names`
+    for req in "${reqs[@]}"; do
+        [ -z $req ] && continue
+        if [[ -z "${provided_dests[$req]}" ]]; then
+            [ $quiet ] || tMsg 0 "Missing required argument: '$req'"
             return $ZERR_BAD_OPTION
         fi
     done
@@ -514,13 +513,43 @@ EOF
     return 0
 }
 
+_zerg_find_dest() {
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: _zerg_find_dest argdefname
+    Given the name of an associative array that represents a ZERG_ARG_DEF object,
+    echo the name of where to store that argument's value. IF the argdef
+    set an explicit --dest value, that is returned; otherwise the argument's
+    reference name is extracted from the assoc name and returned.
+Example: This returns "ignore_case" unless it was overridden by --dest:
+    _zerg_find_dest MYPARSER__ignore_case
+
+Options:
+    --quiet, --verbose (see also options on `zerg_new`).
+Example:
+    zerg_parse MYPARSER "$@"
+EOF
+            return ;;
+        -q|--quiet) quiet='-q' ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    req_zerg_class ZERG_ARG_DEF "$1" || return $ZERR_ZERG_TVALUE
+    local dest=`aa_get $1 dest`
+    [ -n "$dest" ] || dest=${1#*__}
+    echo $dest
+}
+
 _zerg_find_arg_def() {
     # Find the actual variable storing this option, and return that name.
     # Find despite abbreviations, aliases, case, etc.
     # TODO Add ignore-hyphens support via zerg_opt_to_var().
     local parser_name=$1 opt_given=$2  # with hyphens
     local ic=$3 abbrev=$4
-    req_edda_class ZERG_PARSER "$1" || return $?
+    req_zerg_class ZERG_PARSER "$1" || return $?
     is_argname "$opt_given" || return $?
 
     local def_name=${${(P)parser_name}[$opt_given]}

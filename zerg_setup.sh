@@ -3,10 +3,11 @@
 # Steven J. DeRose, 2025-05ff.
 
 
+[ "$HELP_OPTION_EXPR" ] || typeset -gHi HELP_OPTION_EXPR="(-|--)(h|he|hel|help)"
+
 ###############################################################################
-# Test and messaging support
-#
 # Error return codes
+#
 typeset -gHi ZERR_NOT_YET=249
 typeset -gHi ZERR_TEST_FAIL=248
 
@@ -26,16 +27,20 @@ typeset -gHi ZERR_NO_CLASS=79
 typeset -gHi ZERR_NO_CLASS_DEF=78
 typeset -gHi ZERR_CLASS_CHECK=77
 
-[ "$HELP_OPTION_EXPR" ] || typeset -gHi HELP_OPTION_EXPR="(-|--)(h|he|hel|help)"
 
-# Message levels
+###############################################################################
+# Messaging
+#
 typeset -gHi ZERG_V="" ZERG_TR=3
 [[ "$1" == "-v" ]] && ZERG_V=1
 
 # Centralized messaging/tracing, by verbosity level
 tMsg() {
-    local level=$1
-    shift
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        local level=$1; shift
+    else
+        local level=0
+    fi
     [[ $ZERG_V -lt $level ]] && return
     local ftrace="" i=0
     for (( i=1; i<=$ZERG_TR; i++ )); do
@@ -59,7 +64,7 @@ req_argc() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage:
-    req_argc [-q] minArgs maxArgs value
+    req_argc [-q] min max value
     req_argc 2 2 $# || return $ZERR_ARGC
 
 Check whether the value passed in is between min and max inclusive.
@@ -67,7 +72,7 @@ Typically, a caller would use "$#" as the value, making the test be that
 the caller's argument list is of appropriate length. Return 0 if correct,
 otherwise print a message with the caller name, and the 3 arguments.
 
-This can also check if an array index is in bounds:
+This can check any integer range, for example array bounds:
     req_argc 1 $#theArray $index...
 EOF
             return ;;
@@ -88,37 +93,45 @@ EOF
 }
 
 req_sv_type() {
-    local quiet
+    local quiet i
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage:
-    req_sv_type [-q] typename varname
+    req_sv_type [-q] typename varname [typename varname]*
 
-Check whether the named shell variable (no dollar sign!)
+For each typename/varname pair, check whether the named shell variable
 is of the actual typeset-declared zsh type. That is,
 one of undef, scalar, integer, float, array, or assoc). If so, return 0.
-Otherwise (unless `-q` is set) print a message with
-the caller name, variable name, and type, and return code ZERR_SV_TYPE.
+Otherwise  print a message with the caller name, variable name, and type
+(unless `-q` is set), and return code ZERR_SV_TYPE.
 
 Typical use:
     req_sv_type assoc $1 || return $ZERR_SV_TYPE
 
 This function does not recognize a variable as an int, float, etc. if it's
-value just currently looks like one. To truly be a different zsh variable type
-the variable must be declared, for example with `typeset` (or similar
-commands such as `local` and `export`):
-    Integer:  typeset -i X  [or integer X)
-    Float:    typeset -F X  [or float X)
-    Array:    typeset -a X  [or typeset X=(...)]
-    Assoc:    typeset -A X  [no shorthand]
+value just currently looks like one (see is_int, etc. for such lexical tests).
+To be considered a different zsh variable type the variable must be declared,
+for example with `typeset` (or similar commands such as `local` and `export`)..
+Undeclared plain assignment can only create scalars or arrays:
+    Integer:  typeset -i X
+              integer X
+    Float:    typeset -F X
+              float X
+    Array:    typeset -a X
+              typeset X=(...)
+              X=(...)
+    Assoc:    typeset -A X [no shorthand]
     Scalar:   typeset X
+              X='some text'
+              X=99 [this is still a scalar string, not an integer]
 
-See also: req_edda_class, req_zerg_type
+See also: is_sv_type, req_zerg_type, req_zerg_class.
 
-Note: zsh types should not be confused with edda classes or zerg types, which
-are used to test the form of strings (such as option values), such as that
-an int consists of one or more decimal digits (and maybe a sign prefix).
-For testing zerg types, see `req_zerg_type [type] [value]`.
+Note: zsh types should not be confused with zerg types, which
+interpret strings (such as option values). For example, a zerg "int"
+consists of one or more decimal digits (and maybe a sign prefix).
+A zerg "pid" must be an unsigned decimal int, but also be an active process id,
+To test zerg types, see `is_of_zerg_type` or `is_` plus a type name.
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
@@ -127,11 +140,15 @@ EOF
       shift
     done
 
-    local typ=`sv_type $2`
-    if [[ $typ != "$1" ]]; then
-        [ $quiet ] || tMsg 0 "Variable '$2' is $typ, not $1."
-        return $ZERR_SV_TYPE
-    fi
+
+    while (($# > 1)); do
+        local typ=`sv_type $2`
+        if [[ $typ != "$1" ]]; then
+            [ $quiet ] || tMsg 0 "Variable '$2' is $typ, not $1."
+            return $ZERR_SV_TYPE
+        fi
+        shift 2
+    done
 }
 
 req_zerg_type() {
@@ -139,7 +156,7 @@ req_zerg_type() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage:
-    req_zerg_type [-q] typename string
+    req_zerg_type [-q] typename string [typename string]*
     req_zerg_type date "2005-01-01" || return $ZERR_ZERG_TVALUE
 Check whether the string (not a merely named shell variable) satisfies the
 named zerg type (see \$zerg_types). Return 0 iff so;
@@ -150,7 +167,7 @@ Options:
     -q|--quiet: Suppress messages.
     -i|--ignore-case: Disregard case distinctions.
     -- Mark end of options.
-See also: req_edda_type, req_sv_type.
+See also: is_of_zerg_type, req_zerg_class, req_sv_type.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -161,10 +178,46 @@ EOF
       shift
     done
 
-    if ! is_of_zerg_type $1 $2; then
-        [ $quiet ] || tMsg 0 "String '$2' does not match type $1."
-        return $ZERR_SV_TYPE
-    fi
+    while (($# > 1)); do
+        if ! is_of_zerg_type $1 $2; then
+            [ $quiet ] || tMsg 0 "String '$2' does not match type $1."
+            return $ZERR_ZERG_TVALUE
+        fi
+        shift 2
+    done
+}
+
+req_zerg_class() {
+    local quiet ic
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage:
+    req_zerg_class [-q] classname varname
+Check whether the named variable (not a value) is of the
+named zerg class (see \$ZERG_CLASS_KEY). Return 0 iff so;
+otherwise print a message and return non-zero rc.
+Options:
+    -q|--quiet: Suppress messages.
+See also: is_of_zerg_class.
+EOF
+            return ;;
+        -q|--quiet) quiet='-q';;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    req_argc 2 2 $# || return $ZERR_ARGC
+    req_zerg_type ident "$1" || return $ZERR_ARGC
+    req_sv_type assoc "$2" || return $ZERR_ARGC
+
+    while (($# > 1)); do
+        if ! [[ `zerg_get_class "$2"` == "$1" ]]; then
+            [ $quiet ] || tMsg 0 "Assoc '$2' is not of zerg class '$1'."
+            return $ZERR_SV_TYPE
+        fi
+        shift 2
+    done
 }
 
 
@@ -183,10 +236,11 @@ Examples:
     if [[ `sv_type path` == "undef" ]]; then...
 See also:  ${(t)name} or ${(tP)name}, which return a hyphen-separated list of
     keywords, which may also include `special`, `tied`, `export`, etc.
-Note: These are not the same as the type names that can be passed to
-    add_argument via the --type option. Those are enumerated in $aa_types,
-    defined in bootstrap_defs.sh, and validated by functions in parse_args.sh.
-See also: edda_get_type, is_of_zerg_type.
+Notes:
+    * "x=99" makes a scalar string, vs. "local -i x=00" which makes an integer.
+    * zsh types are not the same as zerg types, which are used to constrain
+      the strings accepted as option/argument values with `zerg_parse`.
+See also: is_of_zerg_type, zerg_get_class.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -245,12 +299,12 @@ Echo the value of the named shell variable, escaped and quoted.
     Parentheses are not added.
 * associative array
     Like zsh, extract just the values (not the keys), in undefined order,
-    and treat them like an array (see above).
+    and treat them like an array (see above). See also aa_export.
 * scalar/string
     Put it in single quotes (unless it's a single token).
     Backslash any internal single quotes and backslashes.
     This uses zsh ${(qq)...}.
-See also:  ${(q)name} (and qq, qqq, and qqqq); sv_tostring
+See also: ${(q)name} (and qq, qqq, and qqqq); sv_tostring; aa_export.
 TODO: Add like Python csv QUOTE_NONNUMERIC, MINIMAL, ALL, NONE?
 EOF
             return ;;
@@ -296,8 +350,8 @@ sv_tostring() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: sv_tostring varname
 Echo the value of the named shell variable, in the form that can be used
-    to re-create it via `typeset`.
-See also: sv_quote; typeset -p
+    to re-create it via `typeset` or store it as a composite (q.v.).
+See also: sv_quote, typeset -p.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -334,7 +388,7 @@ Options:
     -f python: dquotes, backslashes, \n\r\t
     -f zsh: Use ${(q)}
     -f url: Various characters to UTF-8 and %xx encoding
-    -- Mark end of options (say, if string to escape may start with "-")
+    -- Mark end of options (say, if a string to escape may start with "-")
 See also: sv_quote; sv_tostring; sv_export
 EOF
             return ;;
@@ -400,6 +454,7 @@ zerg_opt_to_var() {
 Usage zerg_opt_to_var [string]
     Remove leading hyphens, and turn any others to underscores.
     Then make sure the result is a legit variable name (is_ident).
+See also: is_argname, is_varname.
 EOF
         return
     fi
@@ -417,8 +472,8 @@ EOF
 #
 export ZERG_SETUP=1
 
-source 'edda_classes.sh' || echo "edda_classes.sh failed, code $?"
 source 'aa_accessors.sh' || echo "aa_accessors.sh failed, code $?"
+source 'zerg_objects.sh' || echo "zerg_objects.sh failed, code $?"
 source 'zerg_types.sh' || echo "zerg_types.sh failed, code $?"
 source 'zerg_new.sh' || echo "zerg_new.sh failed, code $?"
 source 'zerg_add.sh' || echo "zerg_add.sh failed, code $?"

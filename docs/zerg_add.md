@@ -292,10 +292,10 @@ The fields/items in that assoc may include those shown below (most of which
 are the same as for Python `argparse.add_argument`).
 Items with empty values may be omitted.
 
-* `\uEDDA_CLASS` -- this
-key is used to self-identify the assoc as an instance of an EDDA class,
-in this case class "ZERG_ARG_DEF".
-The key in `$EDDA_CLASS_KEY`, set in [edda_classes.sh].
+* `\uEDDA_CLASS` -- (the first character is U+EDDA) -- this
+key is used to self-identify the assoc as an instance of a zerg object class,
+in this case named "ZERG_ARG_DEF".
+The key in `$ZERG_CLASS_KEY`, set in [zerg_objects.sh].
 * `arg_names` -- the list of space-separated names for the argument.
 * `action` -- a choice from `$zerg_actions` (see [zerg_add.md]).
 * `choices` -- (since zsh cannot store arrays as data in assocs, the choices
