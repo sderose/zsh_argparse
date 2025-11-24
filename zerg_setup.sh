@@ -14,7 +14,7 @@ typeset -gHi ZERR_TEST_FAIL=248
 typeset -gHi ZERR_EVAL_FAIL=99
 typeset -gHi ZERR_ARGC=98
 typeset -gHi ZERR_SV_TYPE=97
-typeset -gHi ZERR_ZERG_TVALUE=96
+typeset -gHi ZERR_ZTYPE_VALUE=96
 typeset -gHi ZERR_BAD_OPTION=95
 typeset -gHi ZERR_ENUM=94
 typeset -gHi ZERR_NO_KEY=93
@@ -31,7 +31,8 @@ typeset -gHi ZERR_CLASS_CHECK=77
 ###############################################################################
 # Messaging
 #
-typeset -gHi ZERG_V="" ZERG_TR=3
+typeset -gHi ZERG_V=""
+typeset -gH ZERG_STACK_LEVELS="10"
 [[ "$1" == "-v" ]] && ZERG_V=1
 
 # Centralized messaging/tracing, by verbosity level
@@ -43,7 +44,8 @@ tMsg() {
     fi
     [[ $ZERG_V -lt $level ]] && return
     local ftrace="" i=0
-    for (( i=1; i<=$ZERG_TR; i++ )); do
+    for (( i=1; i<=$ZERG_STACK_LEVELS; i++ )); do
+        [[ $functrace[$i] =~ zsh: ]] && break;
         ftrace+=" $functrace[$i] \<"
     done
     print "$ftrace: $*" >&2
@@ -157,12 +159,13 @@ req_zerg_type() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage:
     req_zerg_type [-q] typename string [typename string]*
-    req_zerg_type date "2005-01-01" || return $ZERR_ZERG_TVALUE
-Check whether the string (not a merely named shell variable) satisfies the
-named zerg type (see \$zerg_types). Return 0 iff so;
-otherwise print a message with the caller name, string, and type.
+    req_zerg_type date "2005-01-01" || return $ZERR_ZTYPE_VALUE
+Check whether the string satisfies the named zerg type (see \$zerg_types).
+Return 0 iff so; otherwise print a message with the caller name, string, and type.
 Typically the string should be quoted:
-    req_zerg_type idents "$stuff"
+    req_zerg_type idents "$myData"
+Note: This checks values, not variables as such. So to test a variable,
+    reference it with "$" (as just shown), don't just name it.
 Options:
     -q|--quiet: Suppress messages.
     -i|--ignore-case: Disregard case distinctions.
@@ -181,7 +184,7 @@ EOF
     while (($# > 1)); do
         if ! is_of_zerg_type $1 $2; then
             [ $quiet ] || tMsg 0 "String '$2' does not match type $1."
-            return $ZERR_ZERG_TVALUE
+            return $ZERR_ZTYPE_VALUE
         fi
         shift 2
     done
@@ -350,7 +353,7 @@ sv_tostring() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: sv_tostring varname
 Echo the value of the named shell variable, in the form that can be used
-    to re-create it via `typeset` or store it as a composite (q.v.).
+    to re-create it via `typeset` or store it as a packed (q.v.).
 See also: sv_quote, typeset -p.
 EOF
             return ;;
@@ -465,6 +468,18 @@ EOF
         return $ZERR_BAD_NAME
     fi
     echo $x
+}
+
+zerg_ord() {
+    if [[ $1 == "-x" ]]; then
+        printf '%x\n' "'$2"
+    else
+        printf '%d\n' "'$1"
+    fi
+}
+
+zerg_chr() {
+    printf "\\U$(printf '%08x' $1)"
 }
 
 

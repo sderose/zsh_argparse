@@ -72,7 +72,7 @@ _zerg_check_type() {
         return $ZERR_ENUM
     elif ! is_of_zerg_type $type "$value"; then
         tMsg 0 "Argument : Value '$value' does not satisfy type '$type'"
-        return $ZERR_ZERG_TVALUE
+        return $ZERR_ZTYPE_VALUE
     fi
 }
 
@@ -81,7 +81,7 @@ _zerg_check_type() {
 # Help support
 #
 _zerg_help() {
-    # TODO Implement description_breaks. wrap via fmt?
+    # TODO Implement description_breaks. wrap via fmt? $PAGER?
     req_zerg_class ZERG_PARSER "$1" || return $?
     local help_file="${${(P)1}[help_file]}"
     if [ $help_file ]; then
@@ -89,6 +89,8 @@ _zerg_help() {
             tMsg 0 "Help file '$help_file' not found."; return 1
         fi
         local help_tool="${${(P)1}[help_tool]}"
+        is_command -q "$help_tool" || help_tool="$PAGER"
+        [ -n $help_tool ] || help_tool="less"
         is_command -q "$help_tool" || help_tool="less"
         cat $help_file | $help_tool
     else
@@ -106,9 +108,10 @@ _zerg_version() {
 
 _zerg_usage() {
     # Gather options and help strings. wrap via fmt?
-    for key in "${(P)1)[@]}"; do
+    local parser_name="$1"
+    for key in "${(P)parser_name)[@]}"; do
         [[ $key =~ --* ]] || continue
-        local arg_def_name=${${(P)1}[$1__$key]}
+        local arg_def_name=${${(P)parser_name}[$1__$key]}
         local help=${${(Pqq)arg_def_name}[help]}
         local action=${${(Pqq)arg_def_name}[action]}
         local metavar=""
@@ -117,26 +120,95 @@ _zerg_usage() {
             [ $metavar ] || metavar=" "`zerg_opt_to_var "$metavar"`
         fi
         printf "    %-12s %s%s\n" $key $metavar $help
+        if
+        local choices=${${(Pqq)arg_def_name}[choices]}
     done
 }
 
-
 ###############################################################################
+# Result storage support
 #
+_zerg_clear_values() {
+    local parser_name="$1" result_dict="$2"
+    #tMsg 0 "parser $parser_name, result_dict $result_dict."
+    req_zerg_class ZERG_PARSER $parser_name
+    local var_style=`aa_get $parser_name var_style`
+    if [[ "$var_style" == assoc ]]; then
+        req_zerg_type ident "$result_dict" || return $ZERR_ZTYPE_VALUE
+        unset $result_dict
+        typeset -Ag $result_dict
+    else
+        local def_names=`aa_get $parser_name all_def_names`
+        for def_name in ${(z)def_names}; do
+            local base_name=${def_name#*__}
+            local $basename=""
+        done
+    fi
+}
+
 _zerg_store_value() {
     # Store the final value of an option, given dest, var_style, etc.
-    local var_style="$1" result_dict_name="$2" dest="$3" value="$4"
-    tMsg 0 "Store [$var_style, dict $result_dict_name], dest $dest, val $value"
+    local var_style="$1" result_dict="$2" dest="$3" value="$4"
+    #tMsg 0 "Store [$var_style, dict $result_dict], dest $dest, val $value"
     req_argc 4 4 $# || return $?
     if [[ "$var_style" == "assoc" ]]; then
-        aa_set "$result_dict_name" "$dest" "1"
+        aa_set "$result_dict" "$dest" "1" || tMsg 0 "aa_set failed"
     else
         typeset "$dest"="1"
     fi
 }
 
+_zerg_get_value() {
+    local var_style="$1" result_dict="$2" dest="$3"
+    local value
+    #tMsg 0 "var_style=$var_style result_dict=$result_dict dest=$dest."
+    req_argc 3 3 $# || return $?
+    if [[ "$var_style" == "assoc" ]]; then
+        aa_get -q "$result_dict" "$dest"
+    else
+        echo "$dest"
+    fi
+}
+
+_zerg_store_arg_values() {  # TODO result_dict
+    local def_name=$1
+    req_zerg_class ZERG_ARG_DEF "$def_name" || return $?
+    sv_type array $values || return $?
+    local action=$(aa_get -q --default "" "$def_name" "action")
+    local dest=`_zerg_find_dest $def_name`
+    local var_style=$(aa_get -q --default "" "$def_name" "var_style")
+
+    case "$action" in
+        store)
+            if [[ ${#values} -eq 1 ]]; then
+                if [[ "$var_style" == "assoc" ]]; then
+                    aa_set "$result_dict" "$dest" "${values[1]}"
+                else
+                    typeset "$dest"="${values[1]}"
+                fi
+            else
+                if [[ "$var_style" == "assoc" ]]; then
+                    aa_set "$result_dict" "$dest" "${values[*]}"
+                else
+                    # TODO Offer int and float?
+                    typeset "$dest"="${values[*]}"
+                fi
+            fi ;;
+        append|extend)
+            tMsg 0 "APPEND/EXTEND not yet implemented"
+            if [[ "$var_style" == "assoc" ]]; then
+                aa_set "$result_dict" "$dest" "${values[*]}"
+            else
+                typeset "$dest"="${values[*]}"
+            fi ;;
+    esac
+}
+
+
+###############################################################################
+#
 _zerg_process_option() {
-    tHead "Processing option '$3'."
+    #tHead "Processing option '$3'."
     # Process an option that takes a value (cover nargs, actions, etc.)
     local parser_name="$1" def_name="$2" opt_name="$3" index_ref="$4"
     req_zerg_class ZERG_PARSER "$1" || return $?
@@ -150,42 +222,39 @@ _zerg_process_option() {
     # Gather info on where to store option value
     local action=$(aa_get -q "$def_name" "action")
     local var_style=$(aa_get -q "$parser_name" "var_style")
-    [ "$var_style" ] && var_style="separate"
-    local result_dict_name="${parser_name}__results"
+    [ "$var_style" ] || var_style="separate"
+    local result_dict="${parser_name}__results"
     local dest=`_zerg_find_dest $def_name`
     #tMsg 0 "####### def_name '$def_name', option '$opt_name', action '$action', dest '$dest'."
 
     case "$action" in
         store_true)
-            _zerg_store_value $var_style $result_dict_name $dest 1
+            _zerg_store_value $var_style $result_dict $dest 1
             return 0 ;;
         store_false)
-            _zerg_store_value $var_style $result_dict_name $dest ""
+            _zerg_store_value $var_style $result_dict $dest ""
             return 0 ;;
         store_const)
             local val=$(aa_get -q "$def_name" "const")
-            _zerg_store_value $var_style $result_dict_name $dest "$val"
+            _zerg_store_value $var_style $result_dict $dest "$val"
             return 0 ;;
         count)
-            local -i val
-            if [[ "$var_style" == "assoc" ]]; then
-                val=$(aa_get -q -d "0" "$result_dict_name" "$dest")
-            else
-                val="${(P)dest}"
-            fi
-            val+=1
-            tMsg 0 "calling _zerg_store_value '$var_style' '$result_dict_name' '$dest' '$val'."
-            _zerg_store_value "$var_style" "$result_dict_name" "$dest" "$val"
+            #tMsg 0 "Count action for $opt_name"
+            local val=`_zerg_get_value "$var_style" $result_dict $dest`
+            #tMsg 0 "  Val: '$val'."
+            let val="$val + 1"
+            #tMsg 0 "calling _zerg_store_value '$var_style' '$result_dict' '$dest' '$val'."
+            _zerg_store_value "$var_style" "$result_dict" "$dest" "$val"
             return 0 ;;
         toggle)  # Special for --foo / --no-foo pairs
             local val
             if [[ "$var_style" == "assoc" ]]; then
-                val=$(aa_get -q "$result_dict_name" "$dest")
+                val=$(aa_get -q "$result_dict" "$dest")
             else
                 current="${(P)dest}"
             fi
             [[ -z "$val" ]] && val=1
-            _zerg_store_value $var_style $result_dict_name $dest ="$val"
+            _zerg_store_value $var_style $result_dict $dest ="$val"
             return 0 ;;
 
         store|append|extend)  # These actions need argument values
@@ -216,7 +285,7 @@ _zerg_collectArgs() {
     #     +   -- as "*" but must be at least one
     #     ""  -- determined by action
 
-    tMsg 0 "Collecting def $def_name, action $action, nargs $nargs."
+    #tMsg 0 "Collecting def $def_name, action $action, nargs $nargs."
     if [ -z $nargs ]; then
         tMsg 0 "nargs nil."
     elif [[ "$nargs" == "?" ]] || [[ $n -eq 0 ]]; then  # Optional arg
@@ -256,6 +325,7 @@ _zerg_collectArgs() {
         tMsg 0 "Unrecognized nargs value '$nargs'."
         return $ZERR_ENUM
     fi
+    # TODO Needed???
     _zerg_check_arg_values $def_name || return $?
     _zerg_store_arg_values $def_name $action
 }
@@ -266,12 +336,12 @@ _zerg_check_arg_values() {
     req_zerg_class ZERG_ARG_DEF "$def_name" || return $?
     sv_type array $values || return $?
 
-    local fold=$(aa_get -q --default "" "$def_name" "fold")
+    local fold=$(aa_get -q --default "" "$def_name" "fold"):l
     local pattern=$(aa_get -q "$def_name" "pattern")
     local type=$(aa_get -q --default "str" "$def_name" "type")
 
     for value in "${values[@]}"; do
-        case "$fold:l" in
+        case "$fold" in
             upper) value="$value:u" ;;
             lower) value="$value:l" ;;
             *) ;;
@@ -279,53 +349,18 @@ _zerg_check_arg_values() {
         local choice=`_zerg_check_choices $value $choices $ignore_case_choices $allow_abbrev_choices`
         if ! [ $choice ]; then
             tMsg 0 "Value not among choices, use $choices."
-            return $ZERR_ZERG_TVALUE
+            return $ZERR_ZTYPE_VALUE
         fi
         if ! $(_zerg_check_pattern $value $type $pattern); then
             tMsg 0 "Value does not match pattern for type $type: '$value'."
-            return $ZERR_ZERG_TVALUE
+            return $ZERR_ZTYPE_VALUE
         fi
         if ! $(_zerg_check_type $value $type); then
             tMsg 0 "Value does not satisfy type $type: '$value'."
-            return $ZERR_ZERG_TVALUE
+            return $ZERR_ZTYPE_VALUE
         fi
     done
 }
-
-_zerg_store_arg_values() {  # TODO result_dict_name
-    local def_name=$1
-    req_zerg_class ZERG_ARG_DEF "$def_name" || return $?
-    sv_type array $values || return $?
-    local action=$(aa_get -q --default "" "$def_name" "action")
-    local dest=`_zerg_find_dest $def_name`
-    local var_style=$(aa_get -q --default "" "$def_name" "var_style")
-
-    case "$action" in
-        store)
-            if [[ ${#values} -eq 1 ]]; then
-                if [[ "$var_style" == "assoc" ]]; then
-                    aa_set "$result_dict_name" "$dest" "${values[1]}"
-                else
-                    typeset "$dest"="${values[1]}"
-                fi
-            else
-                if [[ "$var_style" == "assoc" ]]; then
-                    aa_set "$result_dict_name" "$dest" "${values[*]}"
-                else
-                    # TODO Offer int and float?
-                    typeset "$dest"="${values[*]}"
-                fi
-            fi ;;
-        append|extend)
-            tMsg 0 "APPEND/EXTEND not yet implemented"
-            if [[ "$var_style" == "assoc" ]]; then
-                aa_set "$result_dict_name" "$dest" "${values[*]}"
-            else
-                typeset "$dest"="${values[*]}"
-            fi ;;
-    esac
-}
-
 
 ###############################################################################
 # For bundled short options that don't take arguments
@@ -339,6 +374,7 @@ _zerg_process_flag_option() {
     fi
     local action=${${(P)def_name}[action]}
     [[ -z "$action" ]] && action="store"
+    tMsg 0 "FLAG option $opt_name, action $action."
     case "$action" in
         store_true|store_false|store_const|count|toggle)
             local dummy_array dummy_index
@@ -391,6 +427,12 @@ EOF
     local ic=$(aa_get -q -d "1" "$parser_name" "ignore_case")
     local icc=$(aa_get -q -d "1" "$parser_name" "ignore_case_choices")
     local var_style=$(aa_get -q -d "separate" "$parser_name" "var_style")
+    local result_dict="${parser_name}__results"
+
+    # Initialize result storage
+    #tMsg 0 "*** par $parser_name, res $result_dict."
+    _zerg_clear_values $parser_name $result_dict
+
 
     # Get names for defined arguments (including aliases)
     local all_arg_names=${${(P)parser_name}[all_arg_names]}
@@ -404,24 +446,19 @@ EOF
     local -a cmdline_args=("$@")  # Inherits to called functions!
     #tMsg 0 "Tokens to parse: $cmdline_args."
 
-    # Initialize result storage
-    if [[ "$var_style" == "assoc" ]]; then
-        local result_dict_name="${parser_name}__results"
-        typeset -xA "$result_dict_name"
-    fi
-
     # Set defaults
-    tHead "Setting defaults early"
+    #tHead "Setting defaults early"
     local all_def_names="${${(P)parser_name}[all_def_names]}"
-    tMsg 0 "all_def_names: '$all_def_names'."
+    #tMsg 0 "all_def_names: '$all_def_names'."
     for def_name in "${(z)all_def_names}"; do
         #tMsg 0 "    def_name: '$def_name'."
         local default_val=$(aa_get -q "$def_name" "default")
         local dest=`_zerg_find_dest $def_name`
 
+        ### TODO Switch to use store function
         if [[ -n "$default_val" && -n "$dest" ]]; then
             if [[ "$var_style" == "assoc" ]]; then
-                aa_set $result_dict_name "$dest" "$default_val"
+                aa_set "$result_dict" "$dest" "$default_val"
             else
                 typeset "$dest"="$default_val"
             fi
@@ -435,10 +472,10 @@ EOF
     local ic=""
     [ `aa_get $parser_name "ignore_case"` ] && ic="-i"
 
-    tHead "Parsing '$cmdline_args' (${#cmdline_args} items)."
+    #tHead "Parsing '$cmdline_args' (${#cmdline_args} items)."
     while [[ $i -le ${#cmdline_args} ]]; do
         local arg="${cmdline_args[i]}"
-        tHead "Parsing cmdline option #$i: '$arg'"
+        #tHead "Parsing cmdline option #$i: '$arg'"
         case "$arg" in
             --help|-h)
                 _zerg_help $parser_name
@@ -452,7 +489,7 @@ EOF
                 local def_name=`_zerg_find_arg_def $parser_name $opt_name $ic $abbr`
                 #tMsg 0 " rc $?, Argdef at '$def_name'."
                 if [ -z $def_name ]; then
-                    tMsg 0 "Failed _zerg_find_arg_def."
+                    tMsg 0 "Failed _zerg_find_arg_def for $parser_name $opt_name."
                     return $ZERR_BAD_OPTION
                 fi
                 #tMsg 0 "  option '$arg', def_name '$def_name', opt_name '$opt_name'."
@@ -495,7 +532,7 @@ EOF
     done
 
     # Check for missing required arguments
-    tMsg 0 "Checking for required dests (TODO)"
+    #tMsg 0 "Checking for required dests (TODO)"
     local reqs=`aa_get $parser_name required_arg_names`
     for req in "${reqs[@]}"; do
         [ -z $req ] && continue
@@ -537,8 +574,8 @@ EOF
       shift
     done
 
-    req_zerg_class ZERG_ARG_DEF "$1" || return $ZERR_ZERG_TVALUE
-    local dest=`aa_get $1 dest`
+    req_zerg_class ZERG_ARG_DEF "$1" || return $ZERR_ZTYPE_VALUE
+    local dest=`aa_get -q $1 dest`
     [ -n "$dest" ] || dest=${1#*__}
     echo $dest
 }

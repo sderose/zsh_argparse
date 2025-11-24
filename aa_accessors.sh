@@ -198,24 +198,15 @@ EOF
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
-    local assoc1="$1" assoc2="$2"
+    req_sv_type assoc "$1" assoc "$2" || return $ZERR_SV_TYPE
 
-    local -a keys1 keys2
-    aa_keys "$assoc1" keys1
-    aa_keys "$assoc2" keys2
-
-    #typeset -p keys1
-    #typeset -p keys2
-
-    [[ ${#keys1[@]} -eq ${#keys2[@]} ]] || return 3
+    local -a keys1=(${(k)1}) keys2=(${(k)2})
+    [[ ${#keys1[@]} -ne ${#keys2[@]} ]] && return 3
 
     for key in "${keys1[@]}"; do
         #echo "aa_eq $1 vs $2: key '$key'."
         aa_has "$assoc2" "$key" || return 2
-        local val1=${${(P)assoc1}[$key]}
-        local val2=${${(P)assoc2}[$key]}
-        [[ "$val1" == "$val2" ]] || return 1
+        [[ "${${(P)1}[$key]1}" == "${${(P)2}[$key]}" ]] || return 1
     done
     return 0
 }
@@ -344,18 +335,23 @@ alias aa_del=aa_unset
 # Extractors: keys, values, export
 #
 aa_keys() {
-    local sort
+    local sort isort nsort reverse
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_keys assoc_name [target_assoc]
     Get all keys from a named associative assoc.
     If target_assoc is provided, store keys in that assoc.
     Otherwise, print a space-separated list of keys.
-Option: --sort.
+Options:
+    --sort, --isort, --nsort:  alphabetic, case-ignored, or numeric sort
+    --reverse: reverse sort direction
 Note: Keys containing spaces will be properly quoted.
 EOF
                 return ;;
             --sort) sort=1 ;;
+            --isort) isort=1 ;;
+            --nsort) nsort=1 ;;
+            --reverse) reverse=1 ;;
             *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
@@ -365,8 +361,24 @@ EOF
     req_sv_type assoc "$1" assoc "$2" || return $ZERR_SV_TYPE
     local assoc_name="$1" target_assoc="$2"
 
-    if [ $sort ]; then
-        local -a keys=(${(ko)${(P)assoc_name}})
+    if [ $nsort ]; then
+        if [ $reverse ]; then
+            local -a keys=(${(knO)${(P)assoc_name}})
+        else
+            local -a keys=(${(kn)${(P)assoc_name}})
+        fi
+    elif [ $isort ]; then
+        if [ $reverse ]; then
+            local -a keys=(${(kiO)${(P)assoc_name}})
+        else
+            local -a keys=(${(ki)${(P)assoc_name}})
+        fi
+    elif [ $sort ]; then
+        if [ $reverse ]; then
+            local -a keys=(${(kO)${(P)assoc_name}})
+        else
+            local -a keys=(${(ko)${(P)assoc_name}})
+        fi
     else
         local -a keys=(${(k)${(P)assoc_name}})
     fi
@@ -426,7 +438,7 @@ Options:
     --lines: Pretty-print with newlines
     --no-nil: Do not include items with value ''
     -q|--quiet: Suppress messages
-    --sort: Alphabetize items
+    --sort: Alphabetize items (default if -f view is set)
     --width N: Allow this many columns for keys
 Formats:
   view: pretty-printed (the default)
@@ -455,7 +467,7 @@ EOF
     local lb="" ind="" sep=""
     if [ $lines ]; then lb="\\n"; ind="    "; fi
     local -a keySeq
-    if [[ -n "$sort" ]]; then
+    if [[ -n "$sort" ]] || [[ $format == view ]]; then
         keySeq=("${(@koi)${(P)1}}")
     else
         keySeq=("${(@k)${(P)1}}")

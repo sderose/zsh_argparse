@@ -64,10 +64,10 @@ These and others are discussed below in alphabetical order.
 name on the command line), and in either case, what to store or do.
 
 Action names are lower-case with underscores. However, there is also shorthand.
-Each action name is available as its own option, but
-in lower-case and with hyphen separators instead of underscores.
-So instead of `--action store_true` you can just say `--store-true` (note the
-hyphen vs. underscore; a difference also familiar from Python argparse).
+For example, instead of `--action store_true` you can just say `--store-true` (note the hyphen vs. underscore; a difference also from Python argparse).
+Each action name except `help` is available as its own option this way.
+`help` is *not* a shorthand for `--action help`, because it already is taken
+for specifying an option's help text.
 
 The actions are mostly the same as for Python argparse. The first ones listed
 are cases where no separate value follows the option name itself:

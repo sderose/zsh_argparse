@@ -191,9 +191,10 @@ does have these and a few others as options.
 
 * `url` -- loose checking.
 
-* `lang` -- a language code such as `en-us` (codes are
-defined by ISO 639 and several RFCs, but only the general form,
-not the specific code, is checked here).
+* `lang` -- a language code. Currently this accepts either the form defined
+by ISO 639 and several RFCs (used in HTML, XML, and other places),
+such as "en-us`" or the form seen in locale's `LANG`, such as "en_US.UTF-8".
+Specific country, language, and character set names are not checked.
 
 * `encoding` -- a character encoding scheme. This is checked via `iconv -l`,
 which has a wide selection of names. All the names there consist of

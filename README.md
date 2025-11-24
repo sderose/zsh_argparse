@@ -68,6 +68,24 @@ want to always quote this argument, to be most readable:
     ...
 ```
 
+3a: There is an (experimental) shorthand syntax for adding arguments, that may
+be packed straight onto zerg_new instead of using zerg_add separately for each
+as just shown. It supports names and aliases, a type or action
+(including choices values), defaults, and help strings. If used, these
+declarations should be placed after "--" to clearly separate them from `zerg_new`
+options. Each should be quoted (lots of special characters in there).
+Names and aliases don't need the leading hyphen (for single-character names) or
+hyphens (for longer names).
+
+For example:
+
+```
+    parser_new MYPARSER -- \
+      'quiet|q:store_true[Show fewer messages]' \
+      'out:path=foo.log[Where to write results]' \
+      'format:choice(xml,json,yaml)[Output format]'
+```
+
 4: Apply the parser to the actual arguments. The resulting values are stored
 in an associative array named for your parser name plus "__results",
 or in separate variables named for each option (choose which way by
@@ -89,15 +107,79 @@ non-zero return code, which you may use to exit your function as shown.
 6: If desired, you can dispose of the parser with:
 
 ```
-    zerg_unset MYPARSER
+    zerg_del MYPARSER
 ```
+
+==Notes==
+
+* zerg argument parsing is very similar to Python argparse. But not identical.
+
+* Most of zerg's shell functions accept `-h` or `--help` to provide a short
+description. Most also take `-q` or `--quiet` to suppress
+messages (however, messages reporting errors such as too few or unknown
+arguments are still reported).
+
+* zerg functions generally return 0 for success, and a standardized error
+code on failure (the codes are defined near the top of [zerg_setup.sh]).
+
+* Most `is_xxx` tests (where `xxx` is any zerg type) do not
+offer `-h` or `--help`. Most just test the lexical
+form, but some also text semantics (such as `is_varname`, `is_pid`, etc),
+and a few take options (such as `is_path`). See [zerg_types.md] for details.
+`is_xxx` functions generally do not issue a message
+if the value passed does not satisfy the type requirements; they just
+return 0 on success, or `$ZERR_NOT_OF_TYPE` on failure. However, the alternative
+
+    `is_of_zerg_type [type] [value]`
+
+does issue a message on failure (unless you set `-q`).
+
+* zerg stores parser objects, argument definition objects, etc. in zsh
+associative arrays. These are normally created with `typeset -ghA`, so will
+not show up with plain `typeset -p` (you have to name them specifically).
+This is to avoid clutter. You can dispose of a parser object and any argument
+definitions it owns, with `zerg_del [name]`.
+
+* zerg includes a set of functions for operating on associative arrays,
+closely modeled on Python's API for dicts. These functions can be used entirely
+apart from zerg's argument parser support. The methods are prefixed with `aa_`.
+Many of them can be accomplished with other zsh features, but the zerg
+wrappers may be easier to learn/remember/read for users not yet completely fluent
+in zsh idioms (or already fluent in Python idioms):
+
+    local k=`aa_get MYASSOC $key`
+    local k=${${(P)MYASSOC}[$key]}
+
+    local -a keylist=`aa_keys --sort FOO`
+    local -a keylist=(${(koqq)FOO})
+
+* The aa library also has additions such as being able to find items while
+ignoring case for keys, for recognizing unique abbreviations, and for
+appending to or inserting into string values in place.
+
+* Similar libraries are included to help with zsh (non-associative) arrays
+(`ar_xxx`), with string operations (`str_xxx`), and with set operations (`set_xxx`).
+
+* `aa_export` and `str_escape` convert their targets to various useful representations,
+such as Python, JSON, HTML tables or dls, zsh "qq" form, or pretty-printing. The
+default is `-f view`" (pretty-printing), and with `-f view`, `--sort` also
+defaults to on, so that's easy to get manually:
+    `aa_export MYASSOC`
+
+* Yes, using all this is slightly slower than writing straight zsh. It's a
+tradeoff vs. readability, standardized error messages and codes, and support
+for features like type-checking, higher-end argument parsing, etc.
+I rarely find performance becoming an issue. If it does,
+(a) remember to dispose of parsers after you're done (`zerg_del MYPARSER`),
+(b) replace calls to any offending function(s) with straight zsh code
+(if needed, you can usually learn how just by looking at the zerg implementation).
 
 
 ==Parser storage==
 
 A parser is stored as a zsh associative array with the given name
-(`MYPARSER` in the example above). These are created as global (-x)
-and hidden (-H). The associative array has 4 kinds of entries:
+(`MYPARSER` in the example above). These are created as global (`-x`)
+and hidden (`-H`). The associative array has 4 kinds of entries:
 
 * An item identifying that the assoc represents zerg parser, under
 a constant key available in `$ZERG_CLASS_KEY` (from [zerg_obects.sh]).
@@ -107,19 +189,16 @@ The first character is U+EDDA, a private-use Unicode character.
 under their names converted by removing leading hyphens and converting others
 to underscores; similar to what Python does for storing argument values.)
 * Arguments added to the parser have all their names as items in the parser assoc
-(including
-hyphens), and each one's value is the name of a different associative array,
-where that argument's definition is stored.
-That array's name consists of the name of the parser
+(including hyphens). Each argument's definition is stored as a separate
+associative array. That array's name consists of the name of the parser
 that defined it, "__", and the argument's reference (first) name. For example,
 the definition of the "quiet" option for MYPARSER would be stored in
-MYPARSER__quiet. The name does not include leading hyphens, and any
+`MYPARSER__quiet`. The name does not include leading hyphens, and any
 internal hyphens are changed to "_".
-* Reserved entries for space-separated lists of all attribute names;
-for all the assocs for argument definitions, and for all required arguments.
+* There are aslo reserved entries for space-separated lists of all attribute names;
+for all the assocs for argument definitions; and for all required arguments.
 
-An example is shown below, with the types of entries
-grouped for readability:
+An example is shown below with the types of entries grouped for readability:
 
 MYPARSER=(
     [\uEDDA_CLASS]=ZERG_PARSER
@@ -130,8 +209,8 @@ MYPARSER=(
     [description]=''
     [description_paras]=''
     [epilog]=''
-    [help_file]=''
-    [help_tool]=''
+    [help_file]='mycommand.md'
+    [help_tool]='less'
     [ignore_case]=1
     [ignore_case_choices]=1
     [ignore_hyphens]=''
@@ -152,7 +231,7 @@ MYPARSER=(
 
 ==Argument definition storage==
 
-You add arguments with `zerg_add`, which as mentioned is very like Python's
+You add arguments to a parser with `zerg_add`, which is very like Python's
 `parser.add_argument()`.
 
 There are many more options for built-in types (see [zerg_types.md] for
@@ -168,13 +247,14 @@ the same as the type but with "is_" on the front: is_complex, is_date, etc.
 Command-line options do not all require a value in either Python or zsh. Those
 that do not are commonly called "flag options", and get a value that
 depends on `--default` or `--action`, just like in Python `argparse`.
-True is stored as '1', and false as ''. Items whose
-value is '' (or false, which is stored as ''), may be omitted.
+True is stored as '1', and false as ''. Items whose value is '' may be omitted.
 
-MYPARSER__quiet=(
-    [action]=store_true
-    [help]='Suppress messages.'
-)
+```
+    MYPARSER__quiet=(
+        [action]=store_true
+        [help]='Show fewer messages.'
+    )
+```
 
 
 ==Another Example==
@@ -212,14 +292,8 @@ The resulting option values can be put either into separate variables
 or into a single associative array (see zerg_new's `--var-style` option
 to control this).
 
-See the doc files for each zerg file, and -h on individual zerg functions,
+See the doc files for each zerg file, or `-h` on most individual zerg functions,
 for more information.
-
-Zerg includes a package called `aa_accessors.sh`, which provide most of
-the same methods for zsh associative arrays (hence the "aa_" prefix),
-as Python provides for dicts. I find these easier to remember than
-zsh's panoply of expansion tools, such as `${${(P)1}[$key]}`, and somewhat
-less error-prone when switching languages frequently.
 
 
 ==Error Codes==
@@ -227,25 +301,28 @@ less error-prone when switching languages frequently.
 Common errors use these names in the code, and generate the
 indicated return code values (these variables are defined in `zerg_setup.sh`).
 
-* $ZERR_NOT_YET (999): Unimplemented feature
-* $ZERR_EVAL_FAIL (998): An 'eval' failed.
-* $ZERR_ARGC (98): Wrong number of arguments
-* $ZERR_SV_TYPE (97): Value is not of required zsh/typeset type
-(`is_type_name` given an unknown type names, returns $ZERR_ENUM)
-* $ZERR_ZERG_TVALUE (96): Value does not match specified zerg type
-* $ZERR_BAD_OPTION (95): Unrecognized option name
-* $ZERR_ENUM (94): Value does not match the expected enum
-* $ZERR_NO_KEY (93): Key not found (generally in an assoc)
-* $ZERR_NO_INDEX (92): Index not found (in list or string)
-* $ZERR_UNDEF (91): Variable is not defined
-* $ZERR_BAD_NAME (90): String is not a valid identifier
-* $ZERR_DUPLICATE (89): Key or other thing already exists
-* $ZERR_TEST_FAIL (55): Case failed in a test suite
+    * $ZERR_NOT_YET (249): Unimplemented feature
+    * $ZERR_TEST_FAIL (248): [Used during testing/debugging]
+
+    * $ZERR_EVAL_FAIL (99): An 'eval' failed.
+    * $ZERR_ARGC (98): Wrong number of arguments
+    * $ZERR_SV_TYPE (97): Value is not of required zsh/typeset type
+    * $ZERR_ZTYPE_VALUE (96): Value does not match specified zerg type
+    * $ZERR_BAD_OPTION (95): Unrecognized option name
+    * $ZERR_ENUM (94): Value does not match the expected enum
+    * $ZERR_NO_KEY (93): Key not found (generally in an assoc)
+    * $ZERR_NO_INDEX (92): Index not found (in list or string)
+    * $ZERR_UNDEF (91): Variable is not defined
+    * $ZERR_BAD_NAME (90): String is not a valid identifier
+    * $ZERR_DUPLICATE (89): Key or other thing already exists
+    * $ZERR_NO_CLASS (79):
+    * $ZERR_NO_CLASS_DEF (78):
+    * $ZERR_CLASS_CHECK (77):
 
 
 ==See also==
 
 There are individual `.md` files for each code file here,
 giving more detail on its content and usage. Nearly all zerg
-shell functions respond to `-h` with brief help, and many accept
-`-q` to suppress messages.
+shell functions (except `is_xxx` tests unless they have options)
+respond to `-h` with brief help, and many accept `-q` to suppress messages.

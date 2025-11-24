@@ -6,13 +6,17 @@ if ! [ $ZERG_SETUP ]; then
     #return $ZERR_UNDEF
 fi
 
+# [help] action is added after generating $zerg_actions_re, because
+# it would collide with --help [message].
 typeset -A zerg_actions=(
     [store]=1 [store_const]=0 [store_false]=0 [store_true]=0
-    [toggle]=0 [count]=0 [help]=0 [version]=0
+    [toggle]=0 [count]=0 [version]=0
     [append]=1 [append_const]=0 [extend]=1
 )
 # turn that into 'case' expr --store|--store-const....
-zerg_actions_exp=${(j:|:)${(k)zerg_actions}:gs/_/-/:gs/^/--/}
+zerg_actions_re="--"${(j:|--:)${(k)zerg_actions}}
+zerg_actions_re=$zerg_actions_re:gs/_/-/
+zerg_actions[help]=0  # See note above
 
 typeset -A aa_fold_values=( [upper]=1 [lower]=2 [""]=0 )
 
@@ -112,7 +116,7 @@ EOF
     fi
     for arg_name in $arg_names_list; do
         if ! is_argname -q "$arg_name"; then
-            [ $quiet ] || tMsg 0 "Option string '$arg_name' is invalid."
+            [ $quiet ] || tMsg 0 "Option name to add is invalid: '$arg_name'."
             return $ZERR_BAD_NAME
         fi
     done
@@ -125,6 +129,7 @@ EOF
 
     # Parse options making up this argument definition
     while [[ $# -gt 0 ]]; do
+        #tMsg 0 "Args are now: $1 | $2 | $3".
         local name=`zerg_opt_to_var "$1"`
         #tMsg 0 "Arg '$1' (->$name)."
         case "$1:l" in
@@ -134,6 +139,9 @@ EOF
                 aa_has zerg_types "$name" || return $ZERR_ENUM
                 aa_set $def_name type "$name" ;;
 
+            ${~zerg_types_re})
+                aa_set $def_name type "$name" ;;
+
             --action|-a)
                 shift
                 name=`zerg_opt_to_var "$1"`
@@ -141,14 +149,12 @@ EOF
                 aa_has zerg_actions "$name" || return $ZERR_ENUM
                 aa_set $def_name action "$name" ;;
 
-            ${~zerg_actions_exp})
-                tMsg 0 "GOT IT: $1"
-                aa_set $def_name type "$name" ;;
-            --bool|--anyint|--binint|--octint|--int|--hexint|--pid|--float|--prob|--logprob|--complex|--str|--char|--ident|--idents|--argname|--cmdname|--uident|--uidents|--path|--url|--format|--pid|--lang|--regex|--datetime|--time|--date|--duration|--epoch)
-                aa_set $def_name type "$name" ;;
-
---store|--store-const|--store-false|--store-true|--toggle|--count|--version|--append|--append-const|--extend)
+            # following does not include --help, to avoid conflict.
+            ${~zerg_actions_re})
                 aa_set $def_name action "$name" ;;
+
+            --help|-h)
+                shift; aa_set $def_name help "$1" ;;
 
             # Convenient combo shorthands
             --flag)
@@ -179,8 +185,6 @@ EOF
                 shift
                 req_zerg_type format "$1" || return $?
                 aa_set $def_name format "$1" ;;  # TODO Check
-            --help|-h)
-                shift; aa_set $def_name help "$1" ;;
             --metavar)
                 shift
                 req_zerg_type ident "$1" || return $?
@@ -220,23 +224,29 @@ EOF
         fi
     fi
 
-    if [[ ${pargs[action]} == "toggle" ]]; then
-        # TODO Finish action=toggle
+    for name in $arg_names_list; do
+        aa_set "$parser_name" "$name" "$def_name"
+    done
+
+    local action=`aa_get $def_name action`
+    if [[ $action == toggle ]]; then
         aa_set $def_name action store_true
-        neg_name=${def_name/__/__no_}
-        #typeset -ghA "$neg_name"
-        aa_copy $neg_name $def_name
-        aa_set $neg_name action store_false
-        for name in $arg_names_list; do
-            #tMsg 0 "  Adding arg name '$name' and '--no-$name' to parser."
-            aa_set "$parser_name" "$name" "$def_name"
-            aa_set "$parser_name" "--no-$name" "$neg_name"  # hyphens?
+        # Build negated version of the arg def form
+        local neg_ref_name=`_zerg_negate_opt_name $ref_name`
+        local neg_def_name="${parser_name}__$neg_ref_name"
+        typedef -ghA $neg_def_name
+        local dft_dest=$ref_name[${#parser_name}+2,-1]
+        aa_set $neg_def_name dest $dft_dest
+        for k in ${(k)def_name}; do
+            if [[ $k =~ ^- ]]; then
+                local neg_k=`_zerg_negate_opt_name $k`
+                aa_set $neg_def_name $neg_k $neg_ref_name
+                aa_append_value "$parser_name" "all_arg_names" "$neg_k "
+            else
+                aa_set $neg_def_name $k `aa_get $def_name $k`
+            fi
         done
-    else
-        for name in $arg_names_list; do
-            #tMsg 0 "  Adding arg name '$name' -> '$def_name' to parser."
-            aa_set "$parser_name" "$name" "$def_name"
-        done
+        aa_set $neg_def_name action store_false
     fi
 
     [ `aa_get -q "$parser_name" "export"` ] || export -n $def_name
@@ -248,6 +258,16 @@ EOF
     #aa_export -f view --sort $parser_name
     #aa_export -f view --sort $def_name
     return 0
+}
+
+_zerg_negate_opt_name() {
+    #  --ignore-case --> --no-ignore-case;  -i --> +i
+    is_argname "$1" || return $ZERR_ZTYPE_VALUE
+    if [[ $1 =~ ^-- ]]; then
+        echo "--no-"$1[3,-1]
+    else
+        echo "+"$1][2,-1]
+    fi
 }
 
 

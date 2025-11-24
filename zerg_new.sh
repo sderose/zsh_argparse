@@ -185,6 +185,9 @@ EOF
     unset "$1"
 }
 
+
+###############################################################################
+#
 zerg_print() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
@@ -212,8 +215,7 @@ Usage: zerg_to_argparse parser_name
 Writes out a zerg parser as roughly equivalent Python argparse calls.
 A few things don't quite transfer -- for example, zerg has quite a few more
 types, at least one more action, and added parser options.
-TODO: Aliases are not yet included -- just the reference name.
-TODO: flag options (no value tokens following)
+TODO: flag and toggle options.
 EOF
             return ;;
         *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
@@ -241,12 +243,12 @@ EOF
     # Collect an assoc of argdefname->optnames
     local adf=`aa_get $parser_name all_def_names`
     local -a all_def_names=(${(z)adf})
-    for def_name in ${(oz)all_def_names}s; do
-        tMsg 0 "Collecting, def_name '$def_name'."
-        if ! [[ `sv_type $def_name` == assoc ]]; then
-            tMsg 0 "Bad storage for argdef '$def_name'."
+    for def_name in ${(oz)all_def_names}; do
+        local ty=`sv_type -q $def_name`
+        if [[ "$ty" != assoc ]]; then
+            tMsg 0 "Argdef '$def_name' is a $ty, not an assoc."
         else
-            local add_buf=`zerg_arg_to_add_argument $def_name`
+            local add_buf=`zerg_arg_def_to_Python $def_name`
             print $add_buf
         fi
     done
@@ -254,27 +256,34 @@ EOF
     print "\n        return parser.parse_args()"
 }
 
-zerg_arg_to_add_argument() {
+zerg_arg_def_to_Python() {
     local def_name="$1"
     local aliases=`aa_get $def_name "arg_names"`
-    local sp="            "
+    local action=$(aa_get -q "$def_name" action)
+    local sp="        "
     local buf="${sp}parser.add_argument("
-    for name in ${(z)aliases}; do
+    for name in $@; do
         buf+="\"$name\", "
     done
+    buf=$buf[1,-3]
 
-    for ao in type action default choices const dest nargs required help; do
-        local val=$(aa_get "$def_name" "$ao")
-        [ "$val" ] || continue
+    local -i resultLen
+    for ao in action type default choices const dest nargs required help; do
+        local val=$(aa_get -q "$def_name" "$ao")
+        [ -z "$val" ] && continue
+        if [[ "$ao" == action ]]; then
+            [[ "$val" == store ]] && continue
+        fi
+
         is_float "$val" || val="\"$val\""
         local item="$ao=$val"
-        resultLen=(($#buf + $#item + 2))
-        if [[ resultLen > 79 ]]; then
+        let resultLen="$#buf + $#item + 2"
+        if [[ resultLen -gt 79 || $ao == help ]]; then
             print "$buf,"
-            buf="$sp$item"
+            buf="$sp    $item"
         else
             buf+=", $item"
         fi
     done
-    print "$buf\n       )"
+    print "$buf\n        )"
 }

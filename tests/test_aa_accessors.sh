@@ -9,7 +9,6 @@ v=0  # verbose
 ###############################################################################
 #
 source test_funcs.sh
-tHead "Testing setup"
 source ../zerg_setup.sh
 
 # Test general shell variable (sv_) functions.
@@ -21,7 +20,7 @@ if [ ${(t)aav_x} ] || [ ${(t)NOBODY_HOME} ]; then
     #return 99
 fi
 
-undef NOBODY_HOME aav_x aav_y aav_phi aav_arr aav_asc aav_colors
+unset NOBODY_HOME aav_x aav_y aav_phi aav_arr aav_asc aav_colors
 
 testOutput 'undef' sv_type NOBODY_HOME
 local aav_x="foo"
