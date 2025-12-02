@@ -4,7 +4,7 @@ This is a port of Python's popular `argparse` library to zsh,
 by Steven J. DeRose.
 
 I wanted a fairly easy way for shell scripts to handle options more
-like many other languages, such as:
+like many other languages provide, such as:
 
 * Ignoring case for option names
 * Recognizing unique abbreviations and aliases
@@ -12,53 +12,41 @@ like many other languages, such as:
 * Checking various value-types like ints in various bases, floats, dates, etc.
 * Easier migration between zsh and Python (for users and developers!).
 
-The library also include support functions specifically for shell variables
-that are arrays (`ar_accessors.sh`), associative arrays (`aa_accessors.sh`),
-sets stored as associative arrays (`set_accessors.sh`), and string functions
-and constants (`str_accessors.sh`). These provide
-shell functions like most of the Python methods available for the corresponding
-types. For example, `aa_values`, `set_union`, `str_rfind`, etc. These can be used
-with or without zerg's argparse-like features.
+Of course, all this can be build in zsh; it's just not there for free.
+Now it is.
 
 ===Example===
 
-Argument parsing code typically goes at the top of a shell function definition.
-Most of the options, constants, etc. are named the same as in Python `argparse`,
-and work basically the same (there are some differences; see [zerg_new.md],
-[zerg_parse.md], etc. for details).
-
-zerg creates shell variable(s) for the parser itself, each distinct argument,
-and for results. These set zsh's "hidden" flag, so they
-won't show up in a generic list of variables (such as from just `typeset -p`).
-
 1: Do this first (say, from your [.zshrc] or similar file)
 to set up zerg as a whole (see [zerg_setup.md] for details):
-This defines common functions and variables, such as standard error codes,
-messaging functions, etc. and then source the remaining files.
 
 ```
     source 'zerg_setup.sh'
 ```
 
-2: Create a named parser. This creates an associative array with
-that name, which "is" the parser. Be careful not to tromp on other variables.
-For example, you shouldn't name a parser "PATH" or "EDITOR" or other names
-predictably used by other programs.
+2: Create a named parser.
+Argument parsing code typically goes at the top of a shell function definition
+(but if preferred, you can create parsers and/or argument definition ahead of
+time and just use them).
+Most things in zerg are named the same as in Python `argparse`,
+and work basically the same (there are some differences; see [zerg_new.md],
+[zerg_parse.md], etc. for details).
 
 ```
     zerg_new MYPARSER
 ```
 
-To see the result, you can do something like:
-    typeset -p MYPARSER
-  or
-    aa_export -f view MYPARSER
+This creates an associative array with that name, which "is" the parser.
+So don't name a parser "PATH" or "EDITOR" or other names
+predictably used by other programs. `zerg_new` takes various options that
+affect the parser as a whole, such as `--allow-abbrev`, `--allow-abbrev-choices`
+(for abbreviating option values defined by `choices`), `--ignore-case`,
+`--ignore-case-choices`, etc. There is also a `--description` option like
+Python `argparse` offers for help, but you may prefer to use `--help-file` to
+specify an external help file, and.or `--help-tool` to specify a command
+to format and display it (default: the user's $EDITOR or `less`).
 
-3: Add argument definitions as illustrated below. The *first* argument after
-the parser name is special: It must be a space-separated (and typically quoted)
-list of names for the argument being defined. This is slightly different from
-Python `argparse`, for which each synonym/alias is given separately. You may
-want to always quote this argument, to be most readable:
+3: Add argument definitions:
 
 ```
     zerg_add MYPARSER "--quiet -q" --action store_true --help "Less messages."
@@ -68,8 +56,20 @@ want to always quote this argument, to be most readable:
     ...
 ```
 
+The first argument is the parser name, and the second one is special:
+It must be a space-separated
+list of names for the argument being defined. This is different from
+Python `argparse`, where each synonym/alias is given separately.
+I always quote this argument, to be most readable by emphasizing that it's
+not an option to `zerg_add`, but the name of an option you're defining.
+
+After the name(s) come options that define the argument being created. These
+are almost the same as in Python `argparse` (except, of course, for using
+the usual shell syntax of leading hyphens, no commas, etc). The most common
+may be `action`, `type`, `default`, and `help`.
+
 3a: There is an (experimental) shorthand syntax for adding arguments, that may
-be packed straight onto zerg_new instead of using zerg_add separately for each
+be packed straight onto `zerg_new` instead of using `zerg_add` separately for each
 as just shown. It supports names and aliases, a type or action
 (including choices values), defaults, and help strings. If used, these
 declarations should be placed after "--" to clearly separate them from `zerg_new`
@@ -90,8 +90,8 @@ For example:
 in an associative array named for your parser name plus "__results",
 or in separate variables named for each option (choose which way by
 using the `--var_style` option on `parse_new`).
-Errors such as unrecognized option or a value not matching what's required
-for a given option, are reported, and cause `zerg_parse` to return a
+Errors such as unrecognized option or a value not matching what is required
+for a given option, are reported, and cause zerg_parse to return a
 non-zero return code, which you may use to exit your function as shown.
 
 ```
@@ -104,78 +104,36 @@ non-zero return code, which you may use to exit your function as shown.
   or
     [ $quiet ] || echo "Hi, I'm starting up."
 
-6: If desired, you can dispose of the parser with:
-
+6: If desired, you can dispose of the parser:
 ```
     zerg_del MYPARSER
 ```
 
-==Notes==
 
-* zerg argument parsing is very similar to Python argparse. But not identical.
+==Zerg storage==
 
-* Most of zerg's shell functions accept `-h` or `--help` to provide a short
-description. Most also take `-q` or `--quiet` to suppress
-messages (however, messages reporting errors such as too few or unknown
-arguments are still reported).
+zerg creates shell variable(s) for the parser itself and each distinct argument,
+These set zsh's "hidden" flag, so they
+won't show up in a generic list of variables (such as from just `typeset -p`).
+Results from parsing actual command line arguments can be stored either in
+one more associative array, or in separate scalar variables.
 
-* zerg functions generally return 0 for success, and a standardized error
-code on failure (the codes are defined near the top of [zerg_setup.sh]).
+Because shell functions are executed within the same shell that invoked them
+(rather than a new sub-shell), the storage stays around.
+You can dispose of a parser object and any argument
+definitions it owns, with `zerg_del [parser_name]`.
+Or you can keep it around (which makes sense for commands likely to be re-used),
+and save time by re-using rather than re-creating it:
 
-* Most `is_xxx` tests (where `xxx` is any zerg type) do not
-offer `-h` or `--help`. Most just test the lexical
-form, but some also text semantics (such as `is_varname`, `is_pid`, etc),
-and a few take options (such as `is_path`). See [zerg_types.md] for details.
-`is_xxx` functions generally do not issue a message
-if the value passed does not satisfy the type requirements; they just
-return 0 on success, or `$ZERR_NOT_OF_TYPE` on failure. However, the alternative
+```
+    if ! [ -v MYPARSER ]; then
+        zerg_new MYPARSER...
+        zerg_add MYPARSER...
+    fi
+    zerg_parse MYPARSER...
+```
 
-    `is_of_zerg_type [type] [value]`
-
-does issue a message on failure (unless you set `-q`).
-
-* zerg stores parser objects, argument definition objects, etc. in zsh
-associative arrays. These are normally created with `typeset -ghA`, so will
-not show up with plain `typeset -p` (you have to name them specifically).
-This is to avoid clutter. You can dispose of a parser object and any argument
-definitions it owns, with `zerg_del [name]`.
-
-* zerg includes a set of functions for operating on associative arrays,
-closely modeled on Python's API for dicts. These functions can be used entirely
-apart from zerg's argument parser support. The methods are prefixed with `aa_`.
-Many of them can be accomplished with other zsh features, but the zerg
-wrappers may be easier to learn/remember/read for users not yet completely fluent
-in zsh idioms (or already fluent in Python idioms):
-
-    local k=`aa_get MYASSOC $key`
-    local k=${${(P)MYASSOC}[$key]}
-
-    local -a keylist=`aa_keys --sort FOO`
-    local -a keylist=(${(koqq)FOO})
-
-* The aa library also has additions such as being able to find items while
-ignoring case for keys, for recognizing unique abbreviations, and for
-appending to or inserting into string values in place.
-
-* Similar libraries are included to help with zsh (non-associative) arrays
-(`ar_xxx`), with string operations (`str_xxx`), and with set operations (`set_xxx`).
-
-* `aa_export` and `str_escape` convert their targets to various useful representations,
-such as Python, JSON, HTML tables or dls, zsh "qq" form, or pretty-printing. The
-default is `-f view`" (pretty-printing), and with `-f view`, `--sort` also
-defaults to on, so that's easy to get manually:
-    `aa_export MYASSOC`
-
-* Yes, using all this is slightly slower than writing straight zsh. It's a
-tradeoff vs. readability, standardized error messages and codes, and support
-for features like type-checking, higher-end argument parsing, etc.
-I rarely find performance becoming an issue. If it does,
-(a) remember to dispose of parsers after you're done (`zerg_del MYPARSER`),
-(b) replace calls to any offending function(s) with straight zsh code
-(if needed, you can usually learn how just by looking at the zerg implementation).
-
-
-==Parser storage==
+===Parser storage===
 
 A parser is stored as a zsh associative array with the given name
 (`MYPARSER` in the example above). These are created as global (`-x`)
@@ -229,7 +187,7 @@ MYPARSER=(
     [required_arg_names]=''
 )
 
-==Argument definition storage==
+===Argument definition storage===
 
 You add arguments to a parser with `zerg_add`, which is very like Python's
 `parser.add_argument()`.
@@ -257,43 +215,104 @@ True is stored as '1', and false as ''. Items whose value is '' may be omitted.
 ```
 
 
-==Another Example==
+==Configuration==
 
-```
-myFunction() {
-    zerg_new OPTS --case-insensitive
+There are a few settings available in [zerg_setup.sh]:
 
-    zerg_add OPTS "--maxChar" --type int --default 65535 \
-        --help "When displaying a range of code points, skip any above this."
-    zerg_add OPTS "--minChar" --int --default 0 \
-        --help "When displaying a range of code points, skip any below this."
-    zerg_add OPTS "--nomac" --action "store_true" \
-        --help "Suppress 'but on Mac' line for code points 128-255."
-    zerg_add OPTS "--python" --store-true \
-        --help "Make --cat write Python tuples, not just messages."
-    zerg_add OPTS "--quiet -q --silent" --action "store_true" --dest shh \
-        --help "Suppress most messages."
-    zerg_use OPTS "--verbose -v" ZERG_OPTS__verbose
+* ZERG_V sets the level of verbosity. You can either assign it in
+zerg_setup.sh, or pass it as an option owhen sourcing zerg_setup.sh.
 
-    zerg_parse OPTS "$*"
-    ...
-}
-```
+* ZERG_DEBUG should make zerg re-load dependencies each time.
 
-Once the arguments are all defined, do this to actually parse what
-you were passed:
+* ZERG_STACK_LEVELS sets how many layers of stack trace are printed with
+tMsg messages (tMsg is also defined in [zerg_setup.sh]).
 
-```
-    zerg_parse OPTS "$@"
-```
 
-The resulting option values can be put either into separate variables
-(the default),
-or into a single associative array (see zerg_new's `--var-style` option
-to control this).
+==zerg types==
 
-See the doc files for each zerg file, or `-h` on most individual zerg functions,
-for more information.
+* zerg provides quite a few types, mainly for use with the `--type` option
+on argument definitions. The types include common ones such as int, float,
+and str, but quite a few more. Remember that these are meant to constrain
+acceptable values for typed values in command lines. Because of that, an
+int specified in base 16 (like 0x2022) is a different thing than the same
+quantity specified in decimal. zerg provides:
+
+    * Integer subtypes: binint, octint, hexint, and anyint (which
+      accepts any of the four).
+    * More specific math types: complex, prob, logprob, and tensor.
+    * ISO date and time: date, time, datetime, duration, and epoch.
+    * OS-meaningful types: argname, cmdname, varname, builtin, reserved,
+      alias, function, ident(s), uident(s) for Unicode names.
+    * "world" types: encoding, lang, locale, pid, url
+    * Others: zertypename, regex, objname, packed
+
+* The types are listed in `zerg_types`. You can most easily view them with
+`aa_export zerg_types`.
+
+* Each type has a corresponding `is_xxx` test function (where `xxx` is
+the zerg type). Most just check the lexical
+form, but some also test semantics (such as `is_varname`),
+and a few take options (such as `is_path`). See [zerg_types.md] for details.
+
+* The test functions generally do not issue a message
+if the value passed does not satisfy the type requirements, and do not
+support `-h` or `-q`, They just
+return 0 on success, or `$ZERR_NOT_OF_TYPE` on failure.However, the alternative
+`is_of_zerg_type` does issue a message if the value does not match the type,
+and does support `-h` and `-q`.
+
+    `is_of_zerg_type [type] [value]`
+
+
+==Aggregate libraries==
+
+zerg also includes support functions for shell
+associative arrays (`aa_accessors.sh`), that wrap or add most of the features
+of Python dicts. Most of these have zsh equivalents, but I find this package
+handy and readable. Under [extras] there are similar libraries for
+non-associative arrays (`ar_accessors.sh`),
+sets stored as associative arrays (`set_accessors.sh`), and string functions
+and constants (`str_accessors.sh`), such as `aa_values`, `set_union`,
+`str_rfind`, etc. These can be used
+with or without zerg's argparse-like features (they are not installed
+by `zerg_setup.sh`, so must be sourced separately if desired).
+
+* The aa library also has functions to find items while
+ignoring case for keys, for recognizing unique abbreviations, and for
+appending to or inserting into string values in place.
+
+* Similar libraries are included to help with zsh (non-associative) arrays
+(`ar_xxx`), with string operations (`str_xxx`), and with set operations (`set_xxx`).
+
+* `aa_export` and `str_escape` convert their targets to various useful representations,
+such as Python, JSON, HTML tables or dls, zsh "qq" form, or pretty-printing. The
+default is `-f view`" (pretty-printing), and with `-f view`, `--sort` also
+defaults to on, so that's easy to get manually:
+
+    `aa_export MYASSOC`
+
+
+==Notes==
+
+* zerg argument parsing is very similar to Python argparse. But not identical.
+
+* Most of zerg's shell functions accept `-h` or `--help` to provide a short
+description. Most also take `-q` or `--quiet` to suppress
+messages (however, messages reporting errors such as too few or unknown
+arguments are still reported). As noted above, type test function are an exception.
+
+* zerg functions generally return 0 for success, and a standardized error
+code on failure. The error codes begin `ZERR_`, and are defined near the
+top of [zerg_setup.sh].
+
+* Yes, zerg is slower than writing straight zsh. If you like type-checking
+for your options, abbreviation and case support, etc. you may like the
+trade-off. Also, if you already know Python and are still learning zsh,
+you may find zerg helps.
+I rarely find performance becoming an issue. If it does,
+(a) remember to dispose of parsers after you're done (`zerg_del MYPARSER`),
+(b) replace calls to any offending function(s) with straight zsh code
+(if needed, you can usually learn how just by looking at the zerg implementation).
 
 
 ==Error Codes==

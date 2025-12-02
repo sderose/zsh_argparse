@@ -12,7 +12,7 @@ fi
 ###############################################################################
 _zerg_check_choices() {
     # Return normalized choice value
-    local value="$1" choices="$2" icc="$3" abbrc="$4"
+    local value="$1" choices="$2" ignore_case_choices="$3" abbrc="$4"
 
     [[ -n "$choices" ]] || return 0
 
@@ -31,13 +31,15 @@ _zerg_check_choices() {
     fi
 
     # Try abbreviation/case-insensitive matching if enabled
-    if [ "$abbrc" || "$icc" ]; then
+    if [ "$abbrc" || "$ignore_case_choices" ]; then
         local chList="Choices: ${choice_list[*]}"
-        aa_find_key -q $icc '__*' choices_map "$value" "$icc"
+        local icc_opt
+        [ -n $ignore_case_choices ] && icc_opt = "-i"
+        local found_key=`aa_find_key -q $icc_opt choices_map "$value"`
         local result=$?
         case $result in
-            1) echo "$_aa_matched_key"; return 0 ;;
-            0) tMsg 0 "'$value' not recognized. $chList."; return $ZERR_ENUM ;;
+            0) echo "$found_key"; return 0 ;;
+            1) tMsg 0 "'$value' not recognized. $chList."; return $ZERR_ENUM ;;
             2) tMsg 0 "'$value' is ambiguous. $chList."; return $ZERR_ENUM ;;
         esac
     else
@@ -90,7 +92,7 @@ _zerg_help() {
         fi
         local help_tool="${${(P)1}[help_tool]}"
         is_command -q "$help_tool" || help_tool="$PAGER"
-        [ -n $help_tool ] || help_tool="less"
+        [ -n "$help_tool" ] || help_tool="less"
         is_command -q "$help_tool" || help_tool="less"
         cat $help_file | $help_tool
     else
@@ -141,7 +143,7 @@ _zerg_clear_values() {
         local def_names=`aa_get $parser_name all_def_names`
         for def_name in ${(z)def_names}; do
             local base_name=${def_name#*__}
-            local $basename=""
+            unset $base_name
         done
     fi
 }
@@ -286,7 +288,7 @@ _zerg_collectArgs() {
     #     ""  -- determined by action
 
     #tMsg 0 "Collecting def $def_name, action $action, nargs $nargs."
-    if [ -z $nargs ]; then
+    if [ -z "$nargs" ]; then
         tMsg 0 "nargs nil."
     elif [[ "$nargs" == "?" ]] || [[ $n -eq 0 ]]; then  # Optional arg
         if [[ $((index_ref + 1)) -le $tot_args ]]; then
@@ -325,7 +327,7 @@ _zerg_collectArgs() {
         tMsg 0 "Unrecognized nargs value '$nargs'."
         return $ZERR_ENUM
     fi
-    # TODO Needed???
+    # TODO values just inherits
     _zerg_check_arg_values $def_name || return $?
     _zerg_store_arg_values $def_name $action
 }
@@ -335,21 +337,25 @@ _zerg_check_arg_values() {
     local def_name=$1
     req_zerg_class ZERG_ARG_DEF "$def_name" || return $?
     sv_type array $values || return $?
+    [ -v icc ] || return $ZERR_MISSING_VAR
 
     local fold=$(aa_get -q --default "" "$def_name" "fold"):l
     local pattern=$(aa_get -q "$def_name" "pattern")
     local type=$(aa_get -q --default "str" "$def_name" "type")
-
+    local choices=$(aa_get -q "$def_name" "choices")
     for value in "${values[@]}"; do
         case "$fold" in
             upper) value="$value:u" ;;
             lower) value="$value:l" ;;
             *) ;;
         esac
-        local choice=`_zerg_check_choices $value $choices $ignore_case_choices $allow_abbrev_choices`
-        if ! [ $choice ]; then
-            tMsg 0 "Value not among choices, use $choices."
-            return $ZERR_ZTYPE_VALUE
+        if [[ $choices ]]; then
+            local choice=`_zerg_check_choices "$value" "$choices" $icc $allow_abbrev_choices`
+            if ! [ $choice ]; then
+                tMsg 0 "Value '$value' not among choices ($choices)."
+                return $ZERR_ZTYPE_VALUE
+            fi
+            value=$choice
         fi
         if ! $(_zerg_check_pattern $value $type $pattern); then
             tMsg 0 "Value does not match pattern for type $type: '$value'."
@@ -424,7 +430,7 @@ EOF
     # Get needed parser settings
     local abbr=$(aa_get -q -d "1" "$parser_name" "allow_abbrev")
     local abbrc=$(aa_get -q -d "1" "$parser_name" "allow_abbrev_choices")
-    local ic=$(aa_get -q -d "1" "$parser_name" "ignore_case")
+    local ignore_case=$(aa_get -q -d "1" "$parser_name" "ignore_case")
     local icc=$(aa_get -q -d "1" "$parser_name" "ignore_case_choices")
     local var_style=$(aa_get -q -d "separate" "$parser_name" "var_style")
     local result_dict="${parser_name}__results"
@@ -469,8 +475,8 @@ EOF
     local -a positional_args
     local -A provided_dests
     local -i i=1
-    local ic=""
-    [ `aa_get $parser_name "ignore_case"` ] && ic="-i"
+    local ignore_case=""
+    [ `aa_get $parser_name "ignore_case"` ] && ignore_case="-i"
 
     #tHead "Parsing '$cmdline_args' (${#cmdline_args} items)."
     while [[ $i -le ${#cmdline_args} ]]; do
@@ -486,9 +492,9 @@ EOF
             --*)
                 # Long option
                 local opt_name="$arg"
-                local def_name=`_zerg_find_arg_def $parser_name $opt_name $ic $abbr`
+                local def_name=`_zerg_find_arg_def $parser_name $opt_name $ignore_case $abbr`
                 #tMsg 0 " rc $?, Argdef at '$def_name'."
-                if [ -z $def_name ]; then
+                if [ -z "$def_name" ]; then
                     tMsg 0 "Failed _zerg_find_arg_def for $parser_name $opt_name."
                     return $ZERR_BAD_OPTION
                 fi
@@ -507,8 +513,8 @@ EOF
                 while [[ $j -le ${#opt_string} ]]; do
                     local short_opt="-${opt_string[j]}"
                     local def_name=""
-                    local def_name=$(_zerg_find_arg_def $parser_name $short_opt $ic $abbr)
-                    if [ -z $def_name ]; then
+                    local def_name=$(_zerg_find_arg_def $parser_name $short_opt $ignore_case $abbr)
+                    if [ -z "$def_name" ]; then
                         tMsg 0 "Could not find arg def for short opt $short_opt."
                         return $ZERR_BAD_OPTION
                     fi
@@ -535,7 +541,7 @@ EOF
     #tMsg 0 "Checking for required dests (TODO)"
     local reqs=`aa_get $parser_name required_arg_names`
     for req in "${reqs[@]}"; do
-        [ -z $req ] && continue
+        [ -z "$req" ] && continue
         if [[ -z "${provided_dests[$req]}" ]]; then
             [ $quiet ] || tMsg 0 "Missing required argument: '$req'"
             return $ZERR_BAD_OPTION
@@ -585,21 +591,21 @@ _zerg_find_arg_def() {
     # Find despite abbreviations, aliases, case, etc.
     # TODO Add ignore-hyphens support via zerg_opt_to_var().
     local parser_name=$1 opt_given=$2  # with hyphens
-    local ic=$3 abbrev=$4
+    local ignore_case=$3 abbrev=$4
     req_zerg_class ZERG_PARSER "$1" || return $?
     is_argname "$opt_given" || return $?
 
     local def_name=${${(P)parser_name}[$opt_given]}
-    if [ -n $def_name ]; then
+    if [ -n "$def_name" ]; then
         echo "$def_name"
         return 0
     fi
     if [[ $abbrev -eq 1 ]]; then
         tMsg 0 "Trying abbreviations"
-        local def_name=`aa_find_key $ic $parser_name "$opt_given"`
+        local def_name=`aa_find_key $ignore_case $parser_name "$opt_given"`
         case $? in
-            1) echo `aa_get $parser_name $def_name`; return 0 ;;
-            0) tMsg 0 "Unknown option: '$opt_given'." ;;
+            0) echo `aa_get $parser_name $def_name`; return 0 ;;
+            1) tMsg 0 "Unknown option: '$opt_given'." ;;
             2) tMsg 0 "Ambiguous option: '$opt_given'." ;;
         esac
     fi

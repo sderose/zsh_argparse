@@ -127,7 +127,7 @@ tHead "Testing str_escape"
 s="A \"string\" with 'apos', &, <, ]]>, and \\."
 testRC FAIL str_escape -q -f xyzzy
 testOutput "A &quot;string&quot; with 'apos', &amp;, &lt;, ]]&gt;, and \\." str_escape "$s"
-testOutput "A &quot;string&quot; with 'apos', &amp;, &lt;, ]]&gt;, and \." str_escape -f html "$s"
+testOutput "A &quot;string&quot; with 'apos', &amp;, &lt;, ]]&gt;, and \." str_escape -f html -- "$s"
 testOutput "A \\\"string\\\" with 'apos', &, <, ]]>, and \\." str_escape -q -f json "$s"
 testOutput "A \\\"string\\\" with 'apos', &, <, ]]>, and \\." str_escape -q -f python "$s"
 
@@ -135,10 +135,32 @@ unset ap q bs
 local ap="\\'"
 local q='"'
 local bs="\\"
-testOutput 'A\ \"string\"\ with\ '"\\'apos\\'"',\ \&,\ \<,\ \]\]\>,\ and\ '"\\." str_escape -f zsh "$s"
-testOutput "A+%22string%22+with+%27apos%27%2C+%26%2C+%3C%2C+%5D%5D%3E%2C+and+%5C." str_escape -f url "$s"
+testOutput 'A\ \"string\"\ with\ '"\\'apos\\'"',\ \&,\ \<,\ \]\]\>,\ and\ '"\\." str_escape -f zsh -- "$s"
+testOutput "A+%22string%22+with+%27apos%27%2C+%26%2C+%3C%2C+%5D%5D%3E%2C+and+%5C." str_escape -f url -- "$s"
 
 # TODO utf8
+
+tHead "Testing find_key"
+
+typeset -A spam=( b 1 bat 3 bath 4 bathySPHere 11 cat 3 catoblepus 10 )
+testOutput b aa_find_key spam b
+testOutput "" aa_find_key spam ba
+testOutput bat aa_find_key spam bat
+testOutput bath aa_find_key spam bath
+testOutput bathySPHere aa_find_key spam bathy
+testOutput "" aa_find_key spam bathysphere
+testOutput catoblepus aa_find_key spam catoblepus
+testOutput "" aa_find_key spam doppleganger
+
+testOutput b aa_find_key -i spam B
+testOutput "" aa_find_key -i spam bA
+testOutput bat aa_find_key -i spam BAT
+testOutput bath aa_find_key -i spam bath
+testOutput bathySPHere aa_find_key -i spam baThy
+testOutput bathySPHere aa_find_key -i spam bathysphere
+testOutput catoblepus aa_find_key -i spam catoblepus
+testOutput "" aa_find_key -i spam DoppleGanger
+
 
 
 tHead "Testing aa_export"

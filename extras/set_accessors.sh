@@ -125,7 +125,7 @@ set_export() {
 
 
 ###############################################################################
-# Combinators (modify the first assoc?)
+# Combinators (these modify the first assoc.
 #
 set_intersect() {  # inplace?
     req_sv_type assoc $1 || return ZERR_SV_TYPE
@@ -164,5 +164,4 @@ set_symmdiff() {
             aa_set $1 $key
         fi
     done
-    # TODO
 }

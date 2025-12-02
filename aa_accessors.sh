@@ -434,12 +434,12 @@ aa_export() {
 Usage: aa_export [options] assoc_name
 Export an associative array to various formats.
 Options:
-    -f|--format: What form to export to. Default: "view"
+    -f|--format name: What form to export to. Default: "view"
     --lines: Pretty-print with newlines
     --no-nil: Do not include items with value ''
     -q|--quiet: Suppress messages
     --sort: Alphabetize items (default if -f view is set)
-    --width N: Allow this many columns for keys
+    --width n: Allow this many columns for keys
 Formats:
   view: pretty-printed (the default)
   htmltable: HTML table with key/value columns
@@ -489,8 +489,8 @@ EOF
             for key in $keySeq; do
                 local val=$(aa_get -q "$1" "$key")
                 [ -z "$val" ] && [ $no_nil ] && continue
-                local ekey=$(str_escape -f html "$key")
-                local eval=$(str_escape -f html "$val")
+                local ekey=$(str_escape -f html -- "$key")
+                local eval=$(str_escape -f html -- "$val")
                 print -n "$ind<tr><td>$ekey</td><td>$eval</td></tr>$lb"
             done
             print -n "$ind</tbody>$lb</table>$lb" ;;
@@ -499,8 +499,8 @@ EOF
             for key in $keySeq; do
                 local val=$(aa_get -q "$1" "$key")
                 [ -z "$val" ] && [ $no_nil ] && continue
-                local ekey=$(str_escape -f html "$key")
-                local eval=$(str_escape -f html "$val")
+                local ekey=$(str_escape -f html -- "$key")
+                local eval=$(str_escape -f html -- "$val")
                 print -n "$ind<dt>$ekey</dt><dd>$eval</dd>$lb"
             done
             print -n "</dl>$lb" ;;
@@ -509,8 +509,8 @@ EOF
             for key in $keySeq; do
                 local val=$(aa_get -q "$1" "$key")
                 [ -z "$val" ] && [ $no_nil ] && continue
-                local ekey=$(str_escape -f python "$key")
-                local eval=$(str_escape -f python "$val")
+                local ekey=$(str_escape -f python -- "$key")
+                local eval=$(str_escape -f python -- "$val")
                 print -n "$sep$lb$ind\"$ekey\": \"$eval\""
                 sep=", "
             done
@@ -523,8 +523,8 @@ EOF
                 local val=$(aa_get -q "$1" "$key")
                 [ -z "$val" ] && [ $no_nil ] && continue
                 #setopt xtrace
-                local ekey=$(str_escape -f json "$key")
-                local eval=$(str_escape -f json "$val")
+                local ekey=$(str_escape -f json -- "$key")
+                local eval=$(str_escape -f json -- "$val")
                 print -n "$sep$lb$ind\"$ekey\": \"$eval\""
                 #unsetopt xtrace
                 sep=", "
@@ -621,7 +621,8 @@ aa_find_key() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_find_key [options] assoc_name partial_key
     Find minimum unique key matches in the named associative array.
-    If there's an *exactly* matching key, it is returned even if
+    If there's an *exactly* matching key (with -i, it must be the only exact
+    match even while ignoring case). then it is returned even if
     there are also other keys that begin with it.
 Arguments:
     assoc_name: name of the associative array
@@ -630,9 +631,9 @@ Options:
     -i|--ignore-case: case insensitive
     -q|--quiet: suppress messages
 Returns:
-    0 = not found
-    1 = unique match (sets global _aa_matched_key)
-    2 = multiple matches
+    0 = unique match (actual found key is echoed)
+    1 = not found
+    2 = multiple matches found
 See also: aa_get_abbrev.
 EOF
                 return ;;
@@ -645,42 +646,35 @@ EOF
 
     req_argc 2 2 $# || return $ZERR_ARGC
     req_sv_type assoc "$1" || return $ZERR_SV_TYPE
-
     local assoc_name="$1" partial_key="$2"
-    local -a matches all_keys
-    local search_key="$partial_key"
 
-    # Get all keys
-    all_keys=(${(k)${(P)assoc_name}})
-
-    # Convert to lowercase for case-insensitive matching
-    if [[ "$ic" == "1" ]]; then
-        search_key="${partial_key:l}"
-    fi
-
-    if aa-has -q $assoc_name $partial_key; then
+    if aa_has -q $assoc_name "$partial_key"; then
         echo $partial_key
-        return 1
+        return 0
     fi
+
+    [ -n $ic ] && partial_key="${partial_key:l}"
 
     # Find matches that start with partial_key
-    for key in "${all_keys[@]}"; do
+    local -a matches exactMatches
+    for key in ${(k)${(P)assoc_name}}; do
         local compare_key="$key"
-        if [[ "$ic" == "1" ]]; then
-            compare_key="${key:l}"
-        fi
-        if [[ "$compare_key" == "$search_key"* ]]; then
-            matches+=("$key")
+        [[ "$ic" == "1" ]] && compare_key="${key:l}"
+        #tMsg -q "Trying request '$partial_key' vs. key '$key' ($compare_key)."
+        if [[ "$compare_key" == $partial_key* ]]; then
+            #tMsg -q "    Adding $key"
+            matches+="$key"
+            [[ $compare_key == $partial_key ]] && exactMatches+="$key"
         fi
     done
 
-    case ${#matches} in
-        0) unset _aa_matched_key
-           return 0 ;;  # NOT FOUND
-        1) _aa_matched_key="${matches[1]}"
-           return 1 ;;  # UNIQUE
-        *) unset _aa_matched_key
-           return 2 ;;  # NOT UNIQUE
+    if [[ $#exactMatches -eq 1 ]]; then
+        echo $exactMatches[1]; return 0
+    fi
+    case $#matches in
+        1) echo ${matches[1]}; return 0 ;;  # UNIQUE
+        0) return 1 ;;  # NOT FOUND
+        *) return 2 ;;  # NOT UNIQUE
     esac
 }
 
@@ -702,13 +696,13 @@ Option:
     -i|--ignore-case: case_insensitive
     -q|--quiet: Suppress messages
 Output: value via stdout if unique match (or a default is applied).
-Error message to stderr otherwise.
+Error message to stderr otherwise (unless -q).
 Return codes: 0=success, 1=not found, 2=not unique.
 See also: aa_find_key.
 EOF
                 return ;;
             -d|--default) shift; default_value="$1"; use_default=1 ;;
-            -i|--ignore-case) ic=1 ;;
+            -i|--ignore-case) ic="-i" ;;
             -q|--quiet) quiet='-q' ;;
             *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;
                 return $ZERR_BAD_OPTION ;;
@@ -720,15 +714,15 @@ EOF
     req_sv_type assoc "$1" || return $ZERR_SV_TYPE
     local assoc_name="$1" partial_key="$2"
 
-    aa_find_key $quiet "$assoc_name" "$partial_key" "$ic"
-    local result=$?
-    case $result in
-        0) [ $use_default ] && echo "$default" && return 0
-            [ $quiet ] || tMsg 0 "Key '$partial_key' not found in $assoc_name";
-            return $ZERR_NO_KEY ;;
-        1) echo `aa_get "$assoc_name" "$_aa_matched_key"`
+    local foundKey=`aa_find_key $quiet $ic "$assoc_name" "$partial_key"`
+    local rc=$?
+    case $rc in
+        0) echo `aa_get "$assoc_name" "$foundKey"`
             return 0 ;;
+        1) [ $use_default ] && echo "$default" && return 0
+            [ $quiet ] || tMsg 0 "Key '$partial_key' not found in $assoc_name";
+            return 1 ;;
         2) [ $quiet ] || tMsg 0 "Key '$partial_key' is ambiguous in $assoc_name"
-            return $ZERR_NO_KEY ;;
+            return 2 ;;
     esac
 }

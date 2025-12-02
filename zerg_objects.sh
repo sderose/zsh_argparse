@@ -31,7 +31,7 @@ EOF
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    [ -z $2 ] || req_zerg_type ident "$2" || return $ZERR_ARGC
+    [ -z "$2" ] || req_zerg_type ident "$2" || return $ZERR_ARGC
     local svt=`sv_type "$1"`
     if [[ $svt == undef ]]; then
         typeset -A $1
@@ -39,11 +39,11 @@ EOF
         [ $quiet ] || tMsg 0 "sv_quote: Variable '$1' is not an assoc."
         return $ZERR_UNDEF
     fi
-    if [ -z $2 ]; then
+    if [ -z "$2" ]; then
         aa_unset -q $1 $ZERG_CLASS_KEY
     else
         local zerg_class=${${(P)1}[$ZERG_CLASS_KEY]}
-        if [ -n $zerg_class ] && [ -z $force ]; then
+        if [ -n "$zerg_class" ] && [ -z "$force" ]; then
             [ $quiet ] || tMsg 0 "sv_quote: Variable '$1' already of type '$zerg_class' (consider -f?)."
             return $ZERR_UNDEF
         fi
@@ -72,7 +72,7 @@ EOF
     req_sv_type assoc "$1" || return $ZERR_SV_TYPE
     local zerg_class=`aa_get "$1" "$ZERG_CLASS_KEY"`
     ### ${${(P)1}[$ZERG_CLASS_KEY]}
-    if [ -z $zerg_class ]; then
+    if [ -z "$zerg_class" ]; then
         [ $quiet ] || tMsg 0 "Assoc '$1' has no zerg class (key '$ZERG_CLASS_KEY')."
         return 1
     fi
@@ -130,12 +130,12 @@ EOF
     req_sv_type assoc "$1" || return $ZERR_ARGC
     local ec=`zerg_get_class zerg_get_class_def` || return $ZERR_NO_CLASS
     local def_name=`zerg_get_class_def $ec` || return $ZERR_NO_CLASS_DEF
-    [ -z $def_name ] && [ -n $optional ] && return 0  # No def, but ok.
+    [ -z "$def_name" ] && [ -n "$optional" ] && return 0  # No def, but ok.
     local key probs
     for key in ${(k)1}; do
         local val=${${(P)1}[$key]}
         local curdef=${${(P)def_name}[$key]}
-        if [ -z $curdef ]; then
+        if [ -z "$curdef" ]; then
             probs+="Unexpected item '$key'. "
         elif ! zerg_class_check_value -q "$curDef" "$val"; then
             probs+="Type error on [$key]='$val' vs. def '$curdef'. "
@@ -145,7 +145,7 @@ EOF
         aa_has "$1" "$key" && continue
         probs+="Missing expected item '$key'. "
     done
-    if [ -n $probs ]; then
+    if [ -n "$probs" ]; then
         [ $quiet ] || tMsg 0 "$probs"
         return $ZERR_CLASS_CHECK
     fi

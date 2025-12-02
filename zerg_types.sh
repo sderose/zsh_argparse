@@ -1,9 +1,8 @@
 #!/bin/zsh
 # Type-related functions for zerg: a zsh port of Python argparse.
 
-if ! [ $ZERG_SETUP ]; then
+if [ -z "$ZERG_SETUP" ]; then
     echo "Source zerg_setup.sh first." >&2
-    return $ZERR_UNDEF
 fi
 
 # Known argument types/forms (distinguishes string forms like hexint).
@@ -18,14 +17,16 @@ typeset -Ah zerg_types=(
     [complex]=complex [tensor]=ndarray
     [str]=str [char]=str
     [ident]=str [idents]=str [uident]=str [uidents]=str
-    [argname]=str [cmdname]=str [varname]=str [objname]=str [zergtypename]=str
+    [argname]=str [cmdname]=str [varname]=str [reserved]=str
+    [objname]=str [zergtypename]=str
     [builtin]=str [function]=str [alias]=str
-    [regex]=str [path]=str [url]=str [lang]=str [encoding]=str [format]=str
+    [regex]=str [path]=str [url]=str [format]=str
+    [lang]=str [encoding]=str [locale]=str
     [time]=time [date]=date [datetime]=datetime
     [duration]=timedelta [epoch]=float
     [packed]=str
 )
-# turn that into 'case' expr --int|--hexint....
+# turn that list into a 'case' expr --int|--hexint....
 zerg_types_re="--"${(j:|--:)${(ko)zerg_types}}
 #tMsg 0 "_types_re: $_types_re"
 
@@ -43,17 +44,19 @@ _bin_re="0[Bb][01]+"
 
 _ident_re="[a-zA-Z_][a-zA-Z0-9_]*"
 _uident_re="[_[:alpha:]][_[:alnum:]]*"
-_argname_re="(-[a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]+)"
+_argname_re="([-+][a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]+)"
 
 _time_re="[0-2][0-9]:[0-5][0-9](:[0-5][0-9](\.[0-9]+)?)?"
 _zone_re="(Z|[-+][0-2][0-9]:[0-5][0-9])"
-_date_re="[0-9][0-9][0-9][0-9]-[01][0-9](-[0-3][0-9]"
+_dom_re="(0[1-9]|[12][0-9]|3[01])"
+_date_re="[0-9][0-9][0-9][0-9](-(0[1-9]|1[012])(-$_dom_re)?)?"
+_duration_re="P([0-9]+Y)?([0-9]+M)?([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+S)?)?"
 
-ZERR_NOT_OF_TYPE=1
+ZERR_NOT_OF_TYPE=1  # Not necessarily an error....
 
 
 ###############################################################################
-# Dispatcher function - calls the appropriate is_* function for a type
+# Dispatcher function - calls the appropriate is_xxx function for given type.
 #
 is_of_zerg_type() {
     local quiet
@@ -63,10 +66,9 @@ Usage: is_of_zerg_type typename value
     Test if the value matches the given zerg type name. Unlike the individual
     is_xxx testers for each type, this produces a message when the value doesn't
     pass (unless you set -q).
-
 The type names are: ${(k)zerg_types}.
 Options: -q.
-Returns: 0 if valid, 1 if not
+Returns: 0 if valid, $ZERR_NOT_OF_TYPE (1) if not.
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
@@ -112,9 +114,9 @@ EOF
 
 
 ###############################################################################
-# Type name validation
+# Type validation
 # Each function validates that a value conforms to a specific type.
-# All validators support a -q (quiet) flag to suppress error messages.
+# All validators accept a -q (quiet) flag.
 
 # String type validation functions
 
@@ -171,9 +173,10 @@ is_uidents() {
 }
 
 is_argname() {
-    # Test for a legit option/argument name: -c or --xx-yy...
-    local quiet=""
-    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    # Test for legit option/argument name form: -c or --xx-yy...
+    # The arg is typically coming in with leading hyphens, so we don't do -q.
+    # TODO Switch to allow -q and also --?
+    [ $# -eq 1 ] || return ZERR_ARGC
     if [[ -z "$1" ]] || ! [[ "$1" =~ ^($_argname_re)$ ]]; then
         # [ $quiet ] || tMsg 0 "'$1' is not a valid --option-name."
         return $ZERR_NOT_OF_TYPE
@@ -189,6 +192,10 @@ is_cmdname() {
         return $ZERR_NOT_OF_TYPE
     fi
     return $@
+}
+
+is_reserved() {
+    (( "${reswords[(Ie)$1]}" ))
 }
 
 # is_optname: See is_argname.
@@ -290,7 +297,7 @@ EOF
 
     # Simplistic path validation
     local pathExpr="^/?[-._$~#[:alnum:]]*(/[-._$~#[:alnum:]]*)*$"
-    if [ -z $loose ] && [[ ! "$1" =~ ($pathExpr) ]]; then
+    if [ -z "$loose" ] && [[ ! "$1" =~ ($pathExpr) ]]; then
         # [ $quiet ] || tMsg 0 "'$1' does not appear to be a valid path."
         return $ZERR_NOT_OF_TYPE
     fi
@@ -329,8 +336,17 @@ is_url() {
 is_encoding() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if ! iconv -l | grep 'UTF-88' >/dev/null; then
+    if ! iconv -l | tr ' ' '\012' | grep "^$1\$" >/dev/null; then
         # [ $quiet ] || tMsg 0 "'$1' is not a recognized encoding."
+        return $ZERR_NOT_OF_TYPE
+    fi
+}
+
+is_locale() {
+    local quiet="" locale_dir="/usr/share/locale/"
+    [[ "$1" == "-q" ]] && quiet='-q' && shift
+    if [ -d "$locale_dir" ] && ! [ -d "$locale_dir/$1" ]; then
+        # [ $quiet ] || tMsg 0 "'$1' is not a installed locale."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -349,8 +365,9 @@ is_lang() {
 is_format() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    local expr="%[-+0 #]*(\\*|\\d+)?(?:\\.(\\*|\\d+))?"
-    expr+="[hlLqjzt]*[diouxXeEfFgGaAcspn%]"
+    local expr='%[-+0 #]*(\*|[0-9]+)?(\.(\*|[0-9]+))?'
+    expr+='[hlLqjzt]*[diouxXeEfFgGaAcspn%]'
+    #tMsg 0 "format expr: $expr."
     if [[ ! "$1" =~ ^($expr)$ ]]; then
         # [ $quiet ] || tMsg 0 "'$1' is not a valid % format code."
         return $ZERR_NOT_OF_TYPE
@@ -442,7 +459,7 @@ EOF
         # [ $quiet ] || tMsg 0 "'$1' is not an active process."
         return $ZERR_NOT_OF_TYPE
     fi
-    if [[ -n $active ]]; then  # Test if we can signal it
+    if [[ -n "$active" ]]; then  # Test if we can signal it
         if ! kill -0 "$1" 2>/dev/null; then
             # [ $quiet ] || tMsg 0 "Process '$1' exists but is not signalable."
             return $ZERR_NOT_OF_TYPE
@@ -475,11 +492,14 @@ is_logprob() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     # Log probability must be <= 0 (since log(p) where 0 < p <= 1)
-    if ! is_float -q "$1"; then
-        [ $quiet ] || tMsg 0 "'$1' is not a valid float."
+    local value="$1"
+    # bc can't handle +x. we ignore "++x".
+    [[ "$value[1]" == "+" ]] && value=$value[2,-1]
+    if ! is_float -q "$value"; then
+        # [ $quiet ] || tMsg 0 "'$1' is not a valid float."
         return $ZERR_NOT_OF_TYPE
-    elif ! (( $(echo "$1 <= 0.0" | bc -l) )); then
-        [ $quiet ] || tMsg 0 "'$1' must be <= 0.0."
+    elif ! (( $(echo "$value <= 0.0" | bc -l) )); then
+        # [ $quiet ] || tMsg 0 "'$1' must be <= 0.0."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -522,7 +542,7 @@ EOF
       shift
     done
 
-    if [ -n $shape ]; then
+    if [ -n "$shape" ]; then
         local -a dims=(${(z)shape})
         local dim
         for dim in $dims; do
@@ -548,7 +568,7 @@ EOF
             depth+=1
             current_sizes[$depth]=0
         elif [[ $tok == ")" ]]; then
-            if [ -n $dims[$depth] ] && [[ $dims[$depth] != "*" ]]; then
+            if [ -n "$dims"[$depth] ] && [[ $dims[$depth] != "*" ]]; then
                 if (( current_sizes[$depth] != $dims[$depth] )); then
                     # [ $quiet ] || tMsg 0 "Dim $depth is length $current_sizes[$depth], not $dims[$depth] at token $i of tensor."
                     return $ZERR_NOT_OF_TYPE
@@ -634,11 +654,16 @@ is_date() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     # Validate ISO8601 date format
-    if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
-       ! date -j -f "%Y-%m-%d" "$1" "+%s" &>/dev/null 2>&1; then
+    if ! [[ "$1" =~ ^$_date_re$ ]]; then
         # [ $quiet ] || tMsg 0 "'$1' is not a valid ISO8601 date."
         return $ZERR_NOT_OF_TYPE
     fi
+    return 0
+    # TODO Add locale support? Gnu vs. BSD probs
+    #date -d "$1" "+%s" &>/dev/null 2>&1 && return 0
+    #date -j -f "%Y-%m-%d" "$1" "+%s" &>/dev/null 2>&1  && return 0
+    #date -j -f "%Y-%m" "$1" "+%s" &>/dev/null 2>&1  && return 0
+    #date -j -f "%Y" "$1" "+%s" &>/dev/null 2>&1  && return 0
 }
 
 is_datetime() {
@@ -657,9 +682,9 @@ is_datetime() {
 is_duration() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    # Simple duration: number followed by unit (s, m, h, d) TODO: beef it up.
-    if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)?[smhd]$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid duration (e.g., 5s, 2.5h, 3d)."
+    # ISO duration:
+    if [[ $#1 -lt 2 ]] || ! [[ "$1" =~ ^${_duration_re}$ ]]; then
+        # [ $quiet ] || tMsg 0 "'$1' is not a valid ISO duration."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -668,12 +693,39 @@ is_epoch() {
     # Unix epoch time is basically float
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
-    if ! is_float "$1"; then
+    if ! is_float -q "$1"; then
         # [ $quiet ] || tMsg 0 "'$1' is not a valid epoch timestamp."
         return $ZERR_NOT_OF_TYPE
     fi
 }
 
+_extract_rhs() {
+    local quiet="" delim='=' zshtype
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: _extract_rhs string
+    Extract and echo everything to the right of the first "=" in string.
+    For example, from output of `typeset -p` such as:
+        typeset -A foo=( [a]=1 [b]='2 3' )
+    If no "=" is present the entire argument is echoed,
+    but $ZERR_NO_INDEX (92) is returned.
+Options: --delim d: Use d as the separator instead of '='.
+EOF
+            return ;;
+        --delim) shift; delim="$1" ;;
+        -q|--quiet) quiet='-q' ;;
+        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    local lhs=${1%%$delim*}
+    if [[ $lhs == $z ]]; then
+        echo "$1"
+        return $ZERR_NO_INDEX
+    fi
+    echo "$1[$#lhs + 1,-1]"
+}
 
 is_packed() {
     local quiet="" zshtype
@@ -681,31 +733,55 @@ is_packed() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: is_packed [[--zshtype name]] string
     Test if string is a packed version of a zsh variable.
-    That means the value is a string as output from typeset -p for the variable.
-    That includes any special properties such as scope, hiddenness, display
-    options, etc.
+    That is, a string such as output by typeset -p:
+        typeset -A foo=( [a]=1 [b]='2 3' )
+        typeset -i foo=99
+        typeset -F foo=99.0000000000
+        typeset -aU foo=( h j k )
+        export S=12
+    Undef doesn't count, for which typeset -p says things like:
+        typeset: no such variable: mmm
 
-    That string should be convertible to a real zsh variable of
+    Such strings should be convertible to a real zsh variable of
     the requisite type(s) using "eval".
+
+    For slightly better safety against injection attacks, ";" is
+    prohibited.
+
+    At present, this does not check any typeset options.
+
 Options:
     If --zshtype name is set, test for the specific type given
-    (one of assoc, array, integer, float, undef, or scalar).
+    (one of assoc, array, integer, float, undef, or scalar). Otherwise,
+    only (packed forms of) assocs and arrays are accepted (since anything
+    passes as a scalar, meaning there would be nothing to test).
 Notes: This is experimental.
+See also: sv_tostring.
 EOF
             return ;;
         --zshtype) shift; zshtype=$1 ;;
-       -q|--quiet) quiet='-q' ;;
+        -q|--quiet) quiet='-q' ;;
         *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    local rhs="${1#*=}"
-    if [ -z $zshtype ]; then
-        if [[ "$1" =~ ^(typeset [^=]*=\() ]]; then
+    if [[ "$1" =~ (\;) ]]; then
+        tMsg 0 "Semicolon is not allowed in packed values."
+        return $ZERR_ZTYPE_VALUE
+    fi
+    local _typeset_re='(typeset|export)( -[a-zA-Z]+)? [_[:alnum:]]+='
+    [[ "$1" =~ ^${_typeset_re}$ ]] || return $ZERR_NOT_OF_TYPE
+
+    local rhs=`_extract_rhs "$1"`
+    tMsg 0 "Arg is '$1', rhs '$rhs', zshtype '$zshtype'."
+    if [ -z "$zshtype" ]; then
+        tMsg 0 "Got no specific --zshtype."
+        if [[ $rhs[1] == "(" ]]; then
             ( local -a test="$rhs" ) 2>/dev/null && return 0
             ( local -A test="$rhs" ) 2>/dev/null && return 0
         fi
+        return $ZERR_NOT_OF_TYPE
     elif [[ $zshtype == assoc ]]; then
         ( local -A test="$rhs" ) 2>/dev/null; return $?
     elif [[ $zshtype == array ]]; then
@@ -719,7 +795,7 @@ EOF
     elif [[ $zshtype == undef ]]; then
         [[ "$rhs" =~ ^(typeset: no such variable) ]]; return $?
     else
-        [ $quiet ] || tMsg 0 "'$1' is not a valid zsg type name."
+        tMsg 0 "'$1' is not a valid zsh/typeset type name."
         return $ZERR_BAD_OPTION
     fi
 }

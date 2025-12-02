@@ -22,6 +22,7 @@ typeset -gHi ZERR_NO_INDEX=92
 typeset -gHi ZERR_UNDEF=91
 typeset -gHi ZERR_BAD_NAME=90
 typeset -gHi ZERR_DUPLICATE=89
+typeset -gHi ZERR_MISSING_VAR=88
 
 typeset -gHi ZERR_NO_CLASS=79
 typeset -gHi ZERR_NO_CLASS_DEF=78
@@ -32,22 +33,26 @@ typeset -gHi ZERR_CLASS_CHECK=77
 # Messaging
 #
 typeset -gHi ZERG_V=""
-typeset -gH ZERG_STACK_LEVELS="10"
 [[ "$1" == "-v" ]] && ZERG_V=1
+typeset -gHi ZERG_DEBUG=1  # Make it re-source every time
+typeset -gH ZERG_STACK_LEVELS="10"
 
 # Centralized messaging/tracing, by verbosity level
 tMsg() {
+    local level=0 quiet="" ftrace="" i=0
+    if [[ "$1" == "-q" ]]; then
+        quiet="-q"; shift
+    fi
     if [[ "$1" =~ ^[0-9]+$ ]]; then
-        local level=$1; shift
-    else
-        local level=0
+        level=$1; shift
     fi
     [[ $ZERG_V -lt $level ]] && return
-    local ftrace="" i=0
-    for (( i=1; i<=$ZERG_STACK_LEVELS; i++ )); do
-        [[ $functrace[$i] =~ zsh: ]] && break;
-        ftrace+=" $functrace[$i] \<"
-    done
+    if [ -z $quiet ]; then
+        for (( i=1; i<=$ZERG_STACK_LEVELS; i++ )); do
+            [[ $functrace[$i] =~ zsh: ]] && break;
+            ftrace+=" $functrace[$i] \<"
+        done
+    fi
     print "$ftrace: $*" >&2
 }
 
@@ -243,7 +248,7 @@ Notes:
     * "x=99" makes a scalar string, vs. "local -i x=00" which makes an integer.
     * zsh types are not the same as zerg types, which are used to constrain
       the strings accepted as option/argument values with `zerg_parse`.
-See also: is_of_zerg_type, zerg_get_class.
+See also: is_of_zerg_type, zerg_get_class, typeset -p, ${(t)x}.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -354,7 +359,7 @@ sv_tostring() {
 Usage: sv_tostring varname
 Echo the value of the named shell variable, in the form that can be used
     to re-create it via `typeset` or store it as a packed (q.v.).
-See also: sv_quote, typeset -p.
+See also: sv_quote, typeset -p, is_packed.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -380,7 +385,7 @@ str_escape() {
     local format="html" quiet=""
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: str_escape [-f formatname] string
+Usage: str_escape [-f formatname] [--] string
 Escape the string as needed for the given format (default: html).
 Options:
     -q | --quiet: Suppress error messages
@@ -389,16 +394,20 @@ Options:
     -f xml: same as --html
     -f json: dquotes, backslashes, \n\r\t
     -f python: dquotes, backslashes, \n\r\t
-    -f zsh: Use ${(q)}
+    -f zsh OR -f q: Use ${(q)}
+    -f qq: Use ${(qq)}
+    -f visible: Use ${(V)x}
     -f url: Various characters to UTF-8 and %xx encoding
-    -- Mark end of options (say, if a string to escape may start with "-")
-See also: sv_quote; sv_tostring; sv_export
+    -- Mark end of options (this is mainly needed if a string to escape
+    may start with "-", lest it be taken as an option)
+See also: sv_quote; sv_tostring; sv_export.
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
         -f|--format) shift; format=$1 ;;
-        --) break ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        --) shift; break ;;
+        *) tMsg 0 "Unrecognized option '$1' (do you need to add '--'?)."
+            return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -424,8 +433,12 @@ EOF
         buf="${buf//$'\r'/\\r}"
         buf="${buf//$'\t'/\\t}"
         echo "$buf"
-    elif [[ $format == zsh ]]; then
+    elif [[ $format == zsh || $format == q ]]; then
         echo "${(q)buf}"
+    elif [[ $format == qq ]]; then
+        echo "${(qq)buf}"
+    elif [[ $format == visible ]]; then
+        echo ${(V)buf}
     elif [[ $format == url ]]; then
         local encoded=""
         local i
@@ -470,6 +483,27 @@ EOF
     echo $x
 }
 
+zerg_var_to_opt() {
+    if [[ "$1" == "-h" ]]; then
+        cat <<'EOF'
+Usage zerg_var_to_opt [string]
+    Add leading hyphens, and turn any underscoresothers to .
+    Then make sure the result is a legit option name (is_argname).
+See also: is_argname, is_varname.
+EOF
+        return
+    fi
+    local x="--"${1:gs/_/-/}
+    if ! is_argname "$x"; then
+        tMsg 0 "Invalid argname '$x' (original: '$1')."
+        return $ZERR_BAD_NAME
+    fi
+    echo $x
+}
+
+
+###############################################################################
+#
 zerg_ord() {
     if [[ $1 == "-x" ]]; then
         printf '%x\n' "'$2"
@@ -485,11 +519,11 @@ zerg_chr() {
 
 ###############################################################################
 #
-export ZERG_SETUP=1
+export -h ZERG_SETUP=1
 
 source 'aa_accessors.sh' || echo "aa_accessors.sh failed, code $?"
-source 'zerg_objects.sh' || echo "zerg_objects.sh failed, code $?"
 source 'zerg_types.sh' || echo "zerg_types.sh failed, code $?"
+source 'zerg_objects.sh' || echo "zerg_objects.sh failed, code $?"
 source 'zerg_new.sh' || echo "zerg_new.sh failed, code $?"
 source 'zerg_add.sh' || echo "zerg_add.sh failed, code $?"
 source 'zerg_parse.sh' || echo "zerg_parse.sh failed, code $?"

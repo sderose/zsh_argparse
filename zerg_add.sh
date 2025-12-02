@@ -13,7 +13,8 @@ typeset -A zerg_actions=(
     [toggle]=0 [count]=0 [version]=0
     [append]=1 [append_const]=0 [extend]=1
 )
-# turn that into 'case' expr --store|--store-const....
+# Turn that into 'case' expr --store|--store-const....
+# Maybe gs/_/[-_]/ ?
 zerg_actions_re="--"${(j:|--:)${(k)zerg_actions}}
 zerg_actions_re=$zerg_actions_re:gs/_/-/
 zerg_actions[help]=0  # See note above
@@ -115,7 +116,7 @@ EOF
         return $ZERR_BAD_NAME
     fi
     for arg_name in $arg_names_list; do
-        if ! is_argname -q "$arg_name"; then
+        if ! is_argname "$arg_name"; then
             [ $quiet ] || tMsg 0 "Option name to add is invalid: '$arg_name'."
             return $ZERR_BAD_NAME
         fi
@@ -129,28 +130,31 @@ EOF
 
     # Parse options making up this argument definition
     while [[ $# -gt 0 ]]; do
-        #tMsg 0 "Args are now: $1 | $2 | $3".
+        tMsg 1 "Args are now: #${(j:#:)@}#."
         local name=`zerg_opt_to_var "$1"`
-        #tMsg 0 "Arg '$1' (->$name)."
+        #tMsg 1 "Arg '$1' (->$name)."
         case "$1:l" in
             --type|-t)
                 shift
                 name=`zerg_opt_to_var "$1"`
+                #tMsg 0 "Type '$name' for def $def_name."
                 aa_has zerg_types "$name" || return $ZERR_ENUM
                 aa_set $def_name type "$name" ;;
 
             ${~zerg_types_re})
+                #tMsg 0 "Type '$name' for def $def_name."
                 aa_set $def_name type "$name" ;;
 
             --action|-a)
                 shift
                 name=`zerg_opt_to_var "$1"`
-                #tMsg 0 "Action '$name' for $def_name."
+                #tMsg 0 "Action '$name' for def $def_name."
                 aa_has zerg_actions "$name" || return $ZERR_ENUM
                 aa_set $def_name action "$name" ;;
 
             # following does not include --help, to avoid conflict.
             ${~zerg_actions_re})
+                #tMsg 0 "Action '$name' for def $def_name."
                 aa_set $def_name action "$name" ;;
 
             --help|-h)
@@ -175,6 +179,7 @@ EOF
                 shift; aa_set $def_name default "$1" ;;  # Type-check at end
             --dest|-v)
                 shift
+                local dest_var=`zerg_opt_to_var "$1"`
                 req_zerg_type ident "$1" || return $?
                 aa_set $def_name dest "$1" ;;
             --fold)
@@ -230,11 +235,15 @@ EOF
 
     local action=`aa_get $def_name action`
     if [[ $action == toggle ]]; then
+        # Fix action on positive arg def
         aa_set $def_name action store_true
-        # Build negated version of the arg def form
-        local neg_ref_name=`_zerg_negate_opt_name $ref_name`
+
+        # Build negative arg def
+        local ref_name=${def_name#[^_]*__}
+        local neg_ref_name="no_$ref_name"
         local neg_def_name="${parser_name}__$neg_ref_name"
-        typedef -ghA $neg_def_name
+        #tMsg 0 "ref $ref_name, neg_ref $neg_ref_name, neg_def $neg_def_name."
+        typedef -ghA "$neg_def_name"
         local dft_dest=$ref_name[${#parser_name}+2,-1]
         aa_set $neg_def_name dest $dft_dest
         for k in ${(k)def_name}; do
@@ -262,11 +271,14 @@ EOF
 
 _zerg_negate_opt_name() {
     #  --ignore-case --> --no-ignore-case;  -i --> +i
-    is_argname "$1" || return $ZERR_ZTYPE_VALUE
+    if ! is_argname "$1"; then
+        tMsg 0 "Not an argname: '$1'."
+        return $ZERR_ZTYPE_VALUE
+    fi
     if [[ $1 =~ ^-- ]]; then
-        echo "--no-"$1[3,-1]
+        echo "--no-${1##--*}"
     else
-        echo "+"$1][2,-1]
+        echo "+${1#-*}"
     fi
 }
 
@@ -280,9 +292,11 @@ zerg_parent() {
 Usage: zerg_parent parser_name parent_name
 Re-use all argument(s) defined in another zerg parser. The parser and its
 argument(s) must still exist.
-    parser_name: name of the parser to add to (see zerg_new)
+    parser_name: name of the parser to add to (see zerg_new).
     parent_name: the name of the parser to take argdefs from.
 This is just a wrapper around zerg_use.
+TODO check parser compatibility: add_help, case, ....
+TODO: Option to exclude parent(s) from option list (or show as a single msg).
 EOF
             return ;;
         -q) quiet="-q" ;;
@@ -292,8 +306,7 @@ EOF
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_zerg_class ZERG_PARSER "$1" || return $?
-    req_zerg_class ZERG_PARSER "$2" || return $?
+    req_zerg_class ZERG_PARSER "$1" ZERG_PARSER "$2" || return $?
     local -a parent_def_names=(${(z)${${(P)2}[all_def_names]}})
     for def_name in parent_def_names; do
         zerg_use $1 $def_name

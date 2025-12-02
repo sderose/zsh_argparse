@@ -1,14 +1,13 @@
 #!/bin/zsh
+# Test zerg, a zsh argument parser.
 #
-
-
-###############################################################################
-# Test zerg.
-
-local TEST_V="" TEST_TYPES="1" TEST_ACTIONS=""
 if [[ $1 == "-v" ]]; then
-    TEST_V=1; ZERG_V=1; shift
+    ZERG_V=0; shift
 fi
+
+local TEST_TYPES=""
+local TEST_ACTIONS="1"
+local TEST_TOGGLE=1
 
 source test_funcs.sh
 source ../zerg_setup.sh
@@ -33,8 +32,8 @@ zerg_add PARSER "--quiet -q --silent" --store-true --help "Less chatty."
 [ $? ] || tMsg 0 "zerg_add for PARSER --quiet failed."
 zerg_add PARSER "--verbose -v" --action count --help "More chatty."
 [ $? ] || tMsg 0 "zerg_add for PARSER --verbose failed."
-zerg_add PARSER "--max" --int --default 999
-[ $? ] || tMsg 0 "zerg_add for PARSER --max failed."
+zerg_add PARSER "--maxChar" --int --default 999
+[ $? ] || tMsg 0 "zerg_add for PARSER --maxChar failed."
 
 tHead "After zerg_adds"
 #aa_export -f view --sort PARSER__quiet
@@ -52,10 +51,10 @@ aa_export -f view --sort PARSER__results
 tHead "Testing w/ many more adds"
 
 zerg_add PARSER "--ignore-case -i" --action store_true --dest no_case --help "Disregard case distinctions."
-[ $TEST_V ] && typeset -p PARSER__no_case
+[ $ZERG_V ] && typeset -p PARSER__no_case
 
 zerg_add -q PARSER "notgood" --action store_true --help "Bad name, add should fail."
-[ $TEST_V ] && typeset -p PARSER__quiet
+[ $ZERG_V ] && typeset -p PARSER__quiet
 
 [ -v PARSER__quiet ] || tMsg 0 "PARSER__quiet missing"
 [ -v verbose ] || tMsg 0 "PARSER__verbose missing"
@@ -65,7 +64,7 @@ zerg_add -q PARSER "notgood" --action store_true --help "Bad name, add should fa
 tHead "Testing parse"
 zerg_parse PARSER --verbose --silent hello.txt file2.txt
 
-echo "Got: quiet $quiet, verbose $verbose, maxchar $maxchar."
+echo "Got: quiet $quiet, verbose $verbose, maxChar $maxChar."
 typeset -p PARSER__results
 
 tHead "Testing zerg_to_argparse"
@@ -81,42 +80,58 @@ if [ $TEST_TYPES ]; then
 
     zerg_add PARSER "--minChar" --type int --default 0 \
         --help "When displaying a range of code points \ skip any below this."
-    [ $TEST_V ] && typeset -p PARSER__minChar
+    [ $ZERG_V ] && typeset -p PARSER__minChar
 
     zerg_add PARSER "--charSpecs" --type anyInt --nargs remainder --help \
          "Unicode code point numbers (base 8 \ 10 \ or 16)."
-    [ $TEST_V ] && typeset -p PARSER__charSpecs
+    [ $ZERG_V ] && typeset -p PARSER__charSpecs
 
     zerg_add PARSER "--category" --type str --default "aardvark" \
         --choices "aardvark basilisk catoblepus dog" \
         --help "List stuff in the specified category."
-    [ $TEST_V ] && typeset -p PARSER__category
+    [ $ZERG_V ] && typeset -p PARSER__category
 
     for cur in ${(ko)zerg_types}; do
-        echo "*** Adding arg --type '$cur' and --$cur."
-        zerg_add PARSER "--${cur}-o1" --type $cur
-        zerg_add PARSER "--${cur}-o2" --$cur --dest result_${cur}_o1
-        [ $TEST_V ] && typeset -p PARSER__${cur}-o1
+        # Presently no types have [-_], but be thorough in case.
+        local cur_opt=$cur:gs/_/-/
+        tMsg 1 "*** Adding arg --type '$cur' and --$cur_opt."
+        zerg_add PARSER "--${cur_opt}-o1" --type $cur
+        zerg_add PARSER "--${cur_opt}-o2" --$cur_opt --dest result_${cur}_o1
+        [ $ZERG_V ] && typeset -p PARSER__${cur}-o1
         is_zergtypename $cur || tMsg 0 "Type didn't pass: '$cur'."
         #is_of_zerg_type -q $cur 99
         #(( $? > 1 )) && tMsg 0 "is_of_zerg_type problem for type '$cur'."
         #is_$cur -q 99
         #(( $? > 1 )) && tMsg 0 "is_$cur problem."
     done
+fi
 
+if [ $TEST_ACTIONS ]; then
     for cur in ${(ko)zerg_actions}; do
-        cur=$cur:gs/_/-/
-        echo "*** Adding arg --action '$cur'."
-        zerg_add PARSER "--${cur}-o1" --action $cur
-        zerg_add PARSER "--${cur}-o2" --$cur --dest result_${cur}_o1
-        [ $TEST_V ] && typeset -p PARSER__${cur}-o1
+        [[ $cur == toggle ]] && continue  # test separately
+        local cur_opt=$cur:gs/_/-/
+        tMsg 1 "*** Adding arg via --action '$cur' as --${cur_opt}-o1."
+        zerg_add PARSER "--${cur_opt}-o1" --action $cur
+        tMsg 1 "    And short way --$cur_opt, as --${cur_opt}-o2"
+        zerg_add PARSER "--${cur_opt}-o2" --$cur_opt --dest result_${cur}_o1
+        [ $ZERG_V ] && typeset -p PARSER__${cur}_o1
     done
 fi
 
+if [ $TEST_TOGGLE ]; then
+fi
 
 
 ###############################################################################
 ### Test re-use
 
 tHead "Testing parse again"
-zerg_parse -v PARSER --quiet -v -v -v --maxchar 65535 --category basilisk --hexint-o1 0xBEEf hello.txt
+zerg_new PAR2
+zerg_add PAR2 "--verbose -v" --count
+zerg_add PAR2 "--category" --choices "aardvark basilisk catoblepus dog" \
+    --help "List stuff in the specified category."
+zerg_add PAR2 "--uchar" --hexint --default 0x2002
+
+zerg_parse -v PAR2 --quiet -v -v -v --category basilisk --uchar 0xBEEf hello.txt
+
+aa_export PAR2__results

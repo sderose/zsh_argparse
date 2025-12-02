@@ -21,6 +21,12 @@ function's actually arguments with `zerg_parse` (see help on those for more deta
 `zerg` works a lot like Python's `argparse` so if you know either then
 learning the other should be pretty easy. But zerg is all zsh.
 
+A nice way to display a parser, argdef, or other assoc, is:
+    aa_export assocname
+
+`aa_export` also has a `-f` or `--format` option with several choices
+(the default choice is `view`, which makes a 2-column, sorted layout).
+
 If desired, you can dispose of the parser afterward (or see "Re-use" below).
 At the moment, re-creating a parser you've already created is an error,
 so you may want to delete or test before creating. However, this is expected

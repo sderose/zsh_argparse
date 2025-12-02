@@ -6,7 +6,10 @@
 Python argparse [https://docs.python.org/3/library/argparse.html].
 But the syntax, set of types, and so on are changed to fit zsh.
 
-For example, here are a few typical uses:
+For example, here are a few typical uses (there is a more compact syntax
+that allows you to add multiple simple options on the `parser_new` command.
+See [zerg_compact.md] for details.
+
 
 ```
     source parser_args.sh

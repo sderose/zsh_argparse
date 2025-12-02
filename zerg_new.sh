@@ -213,9 +213,7 @@ zerg_to_argparse() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: zerg_to_argparse parser_name
 Writes out a zerg parser as roughly equivalent Python argparse calls.
-A few things don't quite transfer -- for example, zerg has quite a few more
-types, at least one more action, and added parser options.
-TODO: flag and toggle options.
+A few things don't quite transfer.
 EOF
             return ;;
         *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
@@ -233,7 +231,7 @@ EOF
     print "    def processOptions() -> argparse.Namespace:"
     print "        parser = argparse.ArgumentParser("
     for po in ignore_case allow_abbrev description usage epilog; do
-        #[ "$notpython[$arg]" ] && continue
+        [ "$notpython[$arg]" ] && continue
         local poval=$(aa_get "$1" "$po")
         is_float -q $poval || poval="\"$poval\""
         print "$sp$po=$poval,"
@@ -243,7 +241,7 @@ EOF
     # Collect an assoc of argdefname->optnames
     local adf=`aa_get $parser_name all_def_names`
     local -a all_def_names=(${(z)adf})
-    for def_name in ${(oz)all_def_names}; do
+    for def_name in ${(zo)all_def_names}; do
         local ty=`sv_type -q $def_name`
         if [[ "$ty" != assoc ]]; then
             tMsg 0 "Argdef '$def_name' is a $ty, not an assoc."
@@ -252,8 +250,7 @@ EOF
             print $add_buf
         fi
     done
-
-    print "\n        return parser.parse_args()"
+    print "        return parser.parse_args()"
 }
 
 zerg_arg_def_to_Python() {
@@ -262,7 +259,7 @@ zerg_arg_def_to_Python() {
     local action=$(aa_get -q "$def_name" action)
     local sp="        "
     local buf="${sp}parser.add_argument("
-    for name in $@; do
+    for name in ${(z)aliases}; do
         buf+="\"$name\", "
     done
     buf=$buf[1,-3]
