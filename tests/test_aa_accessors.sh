@@ -14,25 +14,25 @@ source ../zerg_setup.sh
 # Test general shell variable (sv_) functions.
 
 
-tHead "Testing sv_type"
+tHead "Testing zsh_type"
 if [ ${(t)aav_x} ] || [ ${(t)NOBODY_HOME} ]; then
-    #tMsg 0 "aav_x already exists, cancelling $0...."
+    #warn 0 "aav_x already exists, cancelling $0...."
     #return 99
 fi
 
 unset NOBODY_HOME aav_x aav_y aav_phi aav_arr aav_asc aav_colors
 
-testOutput 'undef' sv_type NOBODY_HOME
+testOutput 'undef' zsh_type NOBODY_HOME
 local aav_x="foo"
-testOutput 'scalar' sv_type aav_x
+testOutput 'scalar' zsh_type aav_x
 local -i aav_y=134217727
-testOutput 'integer' sv_type aav_y
+testOutput 'integer' zsh_type aav_y
 local -x -F aav_phi=1.6180338
-testOutput 'float' sv_type aav_phi
+testOutput 'float' zsh_type aav_phi
 local -a aav_arr=(1 2 3 d e f 3.14)
-testOutput 'array' sv_type aav_arr
+testOutput 'array' zsh_type aav_arr
 local -A aav_asc=( [green]=2 [magenta]="a mixture" [red]=1 )
-testOutput 'assoc' sv_type aav_asc
+testOutput 'assoc' zsh_type aav_asc
 
 
 ###############################################################################
@@ -53,7 +53,7 @@ testRC 0 aa_set $VN foo 1
 testOutput "1" aa_get AAA foo
 
 testRC 0 aa_set $VN pi 3.14159
-tMsg 1 "\$VN is set to var name '$VN', typeset gives:"
+warn 1 "\$VN is set to var name '$VN', typeset gives:"
 testOutput "3.14159" aa_get AAA pi
 
 testRC 0 aa_set $VN greet "hello, there"

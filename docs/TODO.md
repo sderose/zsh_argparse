@@ -34,7 +34,7 @@ at once on zerg_new!!! See [zerg_compact.sh].
     'format:choice(xml,json,yaml)[Output format]' \
     'out:path=foo.log[Where to write results]'
 
-* Rename `sv_type` to `zsh_type`?
+* Rename `zsh_type` to `zsh_type`?
 
 * Avoid redundant usage info for negated options
 
@@ -57,7 +57,7 @@ but update seems not.
 
 ===Low priority===
 
-* Rename 'tMsg' to 'warn'? make trace controllable?
+* Rename 'warn' to 'warn'? make trace controllable?
 
 * Should zerg_actions_re accept [-_] just to be forgiving?
 --type store_true vs. --store-true....

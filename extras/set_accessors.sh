@@ -5,13 +5,13 @@
 # Basics: init, clear, copy, update, set_default
 #
 set_init() {
-    req_sv_type undef $1 || return ZERR_SV_TYPE
+    req_zsh_type undef $1 || return ZERR_ZSH_TYPE
     typeset -A "$1"
     : ${(P)1::=()}
 }
 
 set_clear() {
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
     typeset -A "$1"
     : ${(P)1::=()}
 }
@@ -27,14 +27,14 @@ set_copy() {
 #
 set_has() {  # contains item
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
     return aa_has "$1" "$2"
 }
 
 set_eq() {
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || return ZERR_ZSH_TYPE
     [[ ${(P)#1} == ${(P)#2} ]] || return 1
     for key in ${(P)1[@]}; do
         aa_has $2 $key || return 1
@@ -46,8 +46,8 @@ set_ne() {
 }
 
 set_lt() {  # proper subset
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     [[ ${(P)#1} < ${(P)#2} ]] && return 1
     for key in ${(P)1[@]}; do
         aa_has $2 $key || return 1
@@ -55,8 +55,8 @@ set_lt() {  # proper subset
 }
 
 set_le() {  # subset
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     [[ ${(P)#1} <= ${(P)#2} ]] && return 1
     for key in ${(P)1[@]}; do
         aa_has $2 $key || return 1
@@ -72,8 +72,8 @@ set_gt() {  # superset
 }
 
 set_disjoint() {
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     for key in ${(P)1[@]}; do
         aa_has $2 $key && return 1
     done
@@ -84,8 +84,8 @@ set_disjoint() {
 }
 
 set_intersects() {  # intersect-or-equal?
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     for key in ${(P)1[@]}; do
         aa_has $2 $key && return 0
     done
@@ -98,13 +98,13 @@ set_intersects() {  # intersect-or-equal?
 #
 set_insert() {
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
     aa_set $1 $2 1
 }
 
 set_del() {
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
     aa_unset $1 $2
 }
 
@@ -113,13 +113,13 @@ set_del() {
 # Extractors: keys, values, export
 #
 set_values() {
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
     aa_keys $1
 }
 
 set_export() {
     # TODO handle --format
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
     echo (${(Pqq)1[@]})
 }
 
@@ -128,32 +128,32 @@ set_export() {
 # Combinators (these modify the first assoc.
 #
 set_intersect() {  # inplace?
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     for key in ${(P)1[@]}; do
         aa_has $2 $key || aa_unset $1 $key
     done
 }
 
 set_union() {
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     for key in ${(P)2[@]}; do
         aa_has $1 $key || aa_set $1 $key 1
     done
 }
 
 set_diff() {
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     for key in ${(P)2[@]}; do
         aa_has $1 $key && aa_unset $1 $key
     done
 }
 
 set_symmdiff() {
-    req_sv_type assoc $1 || return ZERR_SV_TYPE
-    req_sv_type assoc $2 || typeset -A $2
+    req_zsh_type assoc $1 || return ZERR_ZSH_TYPE
+    req_zsh_type assoc $2 || typeset -A $2
     for key in ${(P)1[@]}; do
         aa_has $2 $key && aa_unset $1 $key
     done

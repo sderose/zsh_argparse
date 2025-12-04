@@ -3,9 +3,9 @@
 
 _zerg_parser_init() {
     # Check if already exists, and deal.
-    local priorType=`sv_type $parser_name`
+    local priorType=`zsh_type $parser_name`
     if [[ $priorType == ^(scalar|integer|float|array)$ ]]; then
-        tMsg 0 "Cannot create zerg parser '$parser_name', variable already exists."
+        warn 0 "Cannot create zerg parser '$parser_name', variable already exists."
         return $ZERR_DUPLICATE
     elif [[ $priorType == "assoc" ]]; then
         local disp=$(aa_get "$parser_name" "on_redefine")
@@ -15,13 +15,13 @@ _zerg_parser_init() {
         elif [[ $disp == ignore ]]; then
             return 0
         elif [[ $disp == warn ]]; then
-            tMsg 0 "Warning: Parser '$parser_name' already exists."
+            warn 0 "Warning: Parser '$parser_name' already exists."
             zerg_del "$parser_name"
         elif [[ $disp == error ]]; then
-            tMsg 0 "Error: Parser '$parser_name' already exists."
+            warn 0 "Error: Parser '$parser_name' already exists."
             return $ZERR_DUPLICATE
         else
-            tMsg 0 "Unknown value '$disp' for --on-redefine."
+            warn 0 "Unknown value '$disp' for --on-redefine."
             return $ZERR_ENUM
         fi
     fi
@@ -89,7 +89,7 @@ These options of Python ArgumentParser are not (yet) supported:
   argument_default, conflict_handler, exit_on_error
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -135,7 +135,7 @@ EOF
                 aa_set "$parser_name" "ignore_case_choices" "" ;;
             --ignore-hyphens|--ih)
                 aa_set "$parser_name" "ignore_hyphens" 1
-                tMsg 0 "--ignore-hyphens is unfinished." ;;
+                warn 0 "--ignore-hyphens is unfinished." ;;
             --no-ignore-hyphens|--no-ih|--nih)
                 aa_set "$parser_name" "ignore_hyphens" "" ;;
             --on-redefine|--redef)
@@ -145,12 +145,12 @@ EOF
             --var-style|--vars)
                 shift
                 if [[ "$1" != "separate" && "$1" != "assoc" ]]; then
-                    tMsg 0 "--var-style must be 'separate' or 'assoc'"
+                    warn 0 "--var-style must be 'separate' or 'assoc'"
                     return $ZERR_ENUM
                 fi
                 aa_set "$parser_name" "var_style" "$1" ;;
             *)
-                tMsg 0 "Unknown option: $1"; return $ZERR_BAD_OPTION ;;
+                warn 0 "Unknown option: $1"; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
@@ -170,7 +170,7 @@ Arguments that were re-used from another parser are not destroyed.
 
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -178,7 +178,7 @@ EOF
     req_zerg_class ZERG_PARSER "$1" || return $?
     local def_names=`aa_get "$1" all_def_names`
     for def_name in ${(z)def_names}; do
-        #tMsg 0 "Deleting '$def_name'."
+        #warn 0 "Deleting '$def_name'."
         #req_zerg_class ZERG_ARG_DEF "$name" &&
         unset $def_name
     done
@@ -194,7 +194,7 @@ zerg_print() {
 Usage: zerg_print parser_name
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -216,7 +216,7 @@ Writes out a zerg parser as roughly equivalent Python argparse calls.
 A few things don't quite transfer.
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -242,9 +242,9 @@ EOF
     local adf=`aa_get $parser_name all_def_names`
     local -a all_def_names=(${(z)adf})
     for def_name in ${(zo)all_def_names}; do
-        local ty=`sv_type -q $def_name`
+        local ty=`zsh_type -q $def_name`
         if [[ "$ty" != assoc ]]; then
-            tMsg 0 "Argdef '$def_name' is a $ty, not an assoc."
+            warn 0 "Argdef '$def_name' is a $ty, not an assoc."
         else
             local add_buf=`zerg_arg_def_to_Python $def_name`
             print $add_buf

@@ -207,7 +207,7 @@ in array `$reswords`.
 * `varname` -- the name of a currently-available shell variable.
 If a second argument is given it should be the name of a zsh variable type,
 and the variable will be tested for whether it's of that type
-(namely undef, scalar, integer, float, array, or assoc -- see `sv_type`).
+(namely undef, scalar, integer, float, array, or assoc -- see `zsh_type`).
 
 * `zergtypename` -- the name of a zerg-defined datatype. See `$zerg_types`
 and [zerg_types.md].

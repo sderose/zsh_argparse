@@ -12,14 +12,14 @@ local TEST_TOGGLE=1
 source test_funcs.sh
 source ../zerg_setup.sh
 
-if [[ `sv_type PARSER` != "undef" ]]; then
-    tMsg 0 "'PARSER' already defined. Nuking it first."
+if [[ `zsh_type PARSER` != "undef" ]]; then
+    warn 0 "'PARSER' already defined. Nuking it first."
     zerg_del "PARSER"
     if [[ "$PARSER" ]] || [[ "$PARSER__quiet" ]]; then
-        tMsg 0 "zerg_del for PARSER assoc failed!"
+        warn 0 "zerg_del for PARSER assoc failed!"
         return
     else
-        tMsg 0 "Successfully removed PARSER assoc."
+        warn 0 "Successfully removed PARSER assoc."
     fi
 fi
 
@@ -29,11 +29,11 @@ zerg_new PARSER --ignore-case --ignore-case-choices --description "A simple pars
 
 tHead "Testing adds"
 zerg_add PARSER "--quiet -q --silent" --store-true --help "Less chatty."
-[ $? ] || tMsg 0 "zerg_add for PARSER --quiet failed."
+[ $? ] || warn 0 "zerg_add for PARSER --quiet failed."
 zerg_add PARSER "--verbose -v" --action count --help "More chatty."
-[ $? ] || tMsg 0 "zerg_add for PARSER --verbose failed."
+[ $? ] || warn 0 "zerg_add for PARSER --verbose failed."
 zerg_add PARSER "--maxChar" --int --default 999
-[ $? ] || tMsg 0 "zerg_add for PARSER --maxChar failed."
+[ $? ] || warn 0 "zerg_add for PARSER --maxChar failed."
 
 tHead "After zerg_adds"
 #aa_export -f view --sort PARSER__quiet
@@ -56,10 +56,10 @@ zerg_add PARSER "--ignore-case -i" --action store_true --dest no_case --help "Di
 zerg_add -q PARSER "notgood" --action store_true --help "Bad name, add should fail."
 [ $ZERG_V ] && typeset -p PARSER__quiet
 
-[ -v PARSER__quiet ] || tMsg 0 "PARSER__quiet missing"
-[ -v verbose ] || tMsg 0 "PARSER__verbose missing"
-[ -v PARSER__i ] && tMsg 0 "PARSER__i unexpected"
-[ -v PARSER__ignore_case ] || tMsg 0 "PARSER__ignore_case missing"
+[ -v PARSER__quiet ] || warn 0 "PARSER__quiet missing"
+[ -v verbose ] || warn 0 "PARSER__verbose missing"
+[ -v PARSER__i ] && warn 0 "PARSER__i unexpected"
+[ -v PARSER__ignore_case ] || warn 0 "PARSER__ignore_case missing"
 
 tHead "Testing parse"
 zerg_parse PARSER --verbose --silent hello.txt file2.txt
@@ -94,15 +94,15 @@ if [ $TEST_TYPES ]; then
     for cur in ${(ko)zerg_types}; do
         # Presently no types have [-_], but be thorough in case.
         local cur_opt=$cur:gs/_/-/
-        tMsg 1 "*** Adding arg --type '$cur' and --$cur_opt."
+        warn 1 "*** Adding arg --type '$cur' and --$cur_opt."
         zerg_add PARSER "--${cur_opt}-o1" --type $cur
         zerg_add PARSER "--${cur_opt}-o2" --$cur_opt --dest result_${cur}_o1
         [ $ZERG_V ] && typeset -p PARSER__${cur}-o1
-        is_zergtypename $cur || tMsg 0 "Type didn't pass: '$cur'."
+        is_zergtypename $cur || warn 0 "Type didn't pass: '$cur'."
         #is_of_zerg_type -q $cur 99
-        #(( $? > 1 )) && tMsg 0 "is_of_zerg_type problem for type '$cur'."
+        #(( $? > 1 )) && warn 0 "is_of_zerg_type problem for type '$cur'."
         #is_$cur -q 99
-        #(( $? > 1 )) && tMsg 0 "is_$cur problem."
+        #(( $? > 1 )) && warn 0 "is_$cur problem."
     done
 fi
 
@@ -110,9 +110,9 @@ if [ $TEST_ACTIONS ]; then
     for cur in ${(ko)zerg_actions}; do
         [[ $cur == toggle ]] && continue  # test separately
         local cur_opt=$cur:gs/_/-/
-        tMsg 1 "*** Adding arg via --action '$cur' as --${cur_opt}-o1."
+        warn 1 "*** Adding arg via --action '$cur' as --${cur_opt}-o1."
         zerg_add PARSER "--${cur_opt}-o1" --action $cur
-        tMsg 1 "    And short way --$cur_opt, as --${cur_opt}-o2"
+        warn 1 "    And short way --$cur_opt, as --${cur_opt}-o2"
         zerg_add PARSER "--${cur_opt}-o2" --$cur_opt --dest result_${cur}_o1
         [ $ZERG_V ] && typeset -p PARSER__${cur}_o1
     done

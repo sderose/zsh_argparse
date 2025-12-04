@@ -2,43 +2,43 @@
 #
 # Steven J. DeRose, 2025-05ff.
 
-
-[ "$HELP_OPTION_EXPR" ] || typeset -gHi HELP_OPTION_EXPR="(-|--)(h|he|hel|help)"
+[ "$HELP_OPTION_EXPR" ] || typeset -xHi HELP_OPTION_EXPR="(-|--)(h|he|hel|help)"
+#[ "$QUIET_OPTION_EXPR" ] || typeset -xHi QUIET_OPTION_EXPR="(-|--)(q|qu|qui|quie|quiet)"
 
 ###############################################################################
 # Error return codes
 #
-typeset -gHi ZERR_NOT_YET=249
-typeset -gHi ZERR_TEST_FAIL=248
+typeset -xHi ZERR_NOT_YET=249
+typeset -xHi ZERR_TEST_FAIL=248
 
-typeset -gHi ZERR_EVAL_FAIL=99
-typeset -gHi ZERR_ARGC=98
-typeset -gHi ZERR_SV_TYPE=97
-typeset -gHi ZERR_ZTYPE_VALUE=96
-typeset -gHi ZERR_BAD_OPTION=95
-typeset -gHi ZERR_ENUM=94
-typeset -gHi ZERR_NO_KEY=93
-typeset -gHi ZERR_NO_INDEX=92
-typeset -gHi ZERR_UNDEF=91
-typeset -gHi ZERR_BAD_NAME=90
-typeset -gHi ZERR_DUPLICATE=89
-typeset -gHi ZERR_MISSING_VAR=88
+typeset -xHi ZERR_EVAL_FAIL=99
+typeset -xHi ZERR_ARGC=98
+typeset -xHi ZERR_ZSH_TYPE=97
+typeset -xHi ZERR_ZTYPE_VALUE=96
+typeset -xHi ZERR_BAD_OPTION=95
+typeset -xHi ZERR_ENUM=94
+typeset -xHi ZERR_NO_KEY=93
+typeset -xHi ZERR_NO_INDEX=92
+typeset -xHi ZERR_UNDEF=91
+typeset -xHi ZERR_BAD_NAME=90
+typeset -xHi ZERR_DUPLICATE=89
+typeset -xHi ZERR_MISSING_VAR=88
 
-typeset -gHi ZERR_NO_CLASS=79
-typeset -gHi ZERR_NO_CLASS_DEF=78
-typeset -gHi ZERR_CLASS_CHECK=77
+typeset -xHi ZERR_NO_CLASS=79
+typeset -xHi ZERR_NO_CLASS_DEF=78
+typeset -xHi ZERR_CLASS_CHECK=77
 
 
 ###############################################################################
 # Messaging
 #
-typeset -gHi ZERG_V=""
+typeset -xHi ZERG_V=""
 [[ "$1" == "-v" ]] && ZERG_V=1
-typeset -gHi ZERG_DEBUG=1  # Make it re-source every time
-typeset -gH ZERG_STACK_LEVELS="10"
+typeset -xHi ZERG_DEBUG=1  # Make it re-source every time
+typeset -xHi ZERG_STACK_LEVELS="10"
 
 # Centralized messaging/tracing, by verbosity level
-tMsg() {
+warn() {
     local level=0 quiet="" ftrace="" i=0
     if [[ "$1" == "-q" ]]; then
         quiet="-q"; shift
@@ -49,7 +49,7 @@ tMsg() {
     [[ $ZERG_V -lt $level ]] && return
     if [ -z $quiet ]; then
         for (( i=1; i<=$ZERG_STACK_LEVELS; i++ )); do
-            [[ $functrace[$i] =~ zsh: ]] && break;
+            [[ $functrace[$i] =~ ^(zsh:|$) ]] && break;
             ftrace+=" $functrace[$i] \<"
         done
     fi
@@ -84,36 +84,36 @@ This can check any integer range, for example array bounds:
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     if [[ $# -ne 3 ]]; then
-        [ $quiet ] || tMsg 0 "req_argc expected 3 args, but got $#."
+        [ $quiet ] || warn 0 "req_argc expected 3 args, but got $#."
         return $ZERR_ARGC
     fi
     if [[ $3 -lt "$1" ]] || [[ $3 -gt "$2" ]]; then
-        [ $quiet ] || tMsg 0 "Expected from $1 to $2 arg(s), but got $3."
+        [ $quiet ] || warn 0 "Expected from $1 to $2 arg(s), but got $3."
         return $ZERR_ARGC
     fi
 }
 
-req_sv_type() {
+req_zsh_type() {
     local quiet i
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage:
-    req_sv_type [-q] typename varname [typename varname]*
+    req_zsh_type [-q] typename varname [typename varname]*
 
 For each typename/varname pair, check whether the named shell variable
 is of the actual typeset-declared zsh type. That is,
 one of undef, scalar, integer, float, array, or assoc). If so, return 0.
 Otherwise  print a message with the caller name, variable name, and type
-(unless `-q` is set), and return code ZERR_SV_TYPE.
+(unless `-q` is set), and return code ZERR_ZSH_TYPE.
 
 Typical use:
-    req_sv_type assoc $1 || return $ZERR_SV_TYPE
+    req_zsh_type assoc $1 || return $ZERR_ZSH_TYPE
 
 This function does not recognize a variable as an int, float, etc. if it's
 value just currently looks like one (see is_int, etc. for such lexical tests).
@@ -132,7 +132,7 @@ Undeclared plain assignment can only create scalars or arrays:
               X='some text'
               X=99 [this is still a scalar string, not an integer]
 
-See also: is_sv_type, req_zerg_type, req_zerg_class.
+See also: is_zsh_type, req_zerg_type, req_zerg_class.
 
 Note: zsh types should not be confused with zerg types, which
 interpret strings (such as option values). For example, a zerg "int"
@@ -142,17 +142,17 @@ To test zerg types, see `is_of_zerg_type` or `is_` plus a type name.
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
 
     while (($# > 1)); do
-        local typ=`sv_type $2`
+        local typ=`zsh_type $2`
         if [[ $typ != "$1" ]]; then
-            [ $quiet ] || tMsg 0 "Variable '$2' is $typ, not $1."
-            return $ZERR_SV_TYPE
+            [ $quiet ] || warn 0 "Variable '$2' is $typ, not $1."
+            return $ZERR_ZSH_TYPE
         fi
         shift 2
     done
@@ -175,20 +175,20 @@ Options:
     -q|--quiet: Suppress messages.
     -i|--ignore-case: Disregard case distinctions.
     -- Mark end of options.
-See also: is_of_zerg_type, req_zerg_class, req_sv_type.
+See also: is_of_zerg_type, req_zerg_class, req_zsh_type.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
         -i|--ignore-case) ic=1 ;;
         --) break ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     while (($# > 1)); do
         if ! is_of_zerg_type $1 $2; then
-            [ $quiet ] || tMsg 0 "String '$2' does not match type $1."
+            [ $quiet ] || warn 0 "String '$2' does not match type $1."
             return $ZERR_ZTYPE_VALUE
         fi
         shift 2
@@ -210,19 +210,19 @@ See also: is_of_zerg_class.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
     req_zerg_type ident "$1" || return $ZERR_ARGC
-    req_sv_type assoc "$2" || return $ZERR_ARGC
+    req_zsh_type assoc "$2" || return $ZERR_ARGC
 
     while (($# > 1)); do
         if ! [[ `zerg_get_class "$2"` == "$1" ]]; then
-            [ $quiet ] || tMsg 0 "Assoc '$2' is not of zerg class '$1'."
-            return $ZERR_SV_TYPE
+            [ $quiet ] || warn 0 "Assoc '$2' is not of zerg class '$1'."
+            return $ZERR_ZSH_TYPE
         fi
         shift 2
     done
@@ -233,15 +233,15 @@ EOF
 #
 # A few general shell variable handlers (move to zerg_setup.sh)
 #
-sv_type() {
+zsh_type() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: sv_type varname
+Usage: zsh_type varname
 Echo the zsh datatype of the named shell variable, as one of:
     undef, scalar, integer, float, array, assoc.
 Examples:
-    if [[ `sv_type path` == "undef" ]]; then...
+    if [[ `zsh_type path` == "undef" ]]; then...
 See also:  ${(t)name} or ${(tP)name}, which return a hyphen-separated list of
     keywords, which may also include `special`, `tied`, `export`, etc.
 Notes:
@@ -252,12 +252,12 @@ See also: is_of_zerg_type, zerg_get_class, typeset -p, ${(t)x}.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    #tMSg 1 "*** sv_type: '${(tP)1}' for '$1'."
+    #tMSg 1 "*** zsh_type: '${(tP)1}' for '$1'."
     case "${(tP)1}" in
         "")           echo "undef" ;;
         scalar*)      echo "scalar" ;;
@@ -265,29 +265,29 @@ EOF
         float*)       echo "float" ;;
         array*)       echo "array" ;;
         association*) echo "assoc" ;;
-        *) [ $quiet ] || tMsg 0 "Error, (tP) said '${(tP)1}'.";
+        *) [ $quiet ] || warn 0 "Error, (tP) said '${(tP)1}'.";
             return 99 ;;
     esac
 }
 
-is_of_sv_type() {
+is_of_zsh_type() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: is_of_sv_type svtype varname
+Usage: is_of_zsh_type svtype varname
     Check whether the named shell variable is of the given zsh type, one of
     undef, scalar, integer, float, array, assoc.
 Examples:
-    is_of_sv_type undef path || return $?
+    is_of_zsh_type undef path || return $?
 See also: is_of_zerg_type.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    local the_type=`sv_type "$2"` || return $?
+    local the_type=`zsh_type "$2"` || return $?
     [[ $the_type == "$1" ]] || return 1
 }
 
@@ -317,15 +317,15 @@ TODO: Add like Python csv QUOTE_NONNUMERIC, MINIMAL, ALL, NONE?
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 1 1 $# || return $ZERR_ARGC
-    local typ=`sv_type $1`
+    local typ=`zsh_type $1`
     if [[ $typ == undef ]]; then
-        [ $quiet ] || tMsg 0 "sv_quote: Variable not defined: '$1'."
+        [ $quiet ] || warn 0 "sv_quote: Variable not defined: '$1'."
         return $ZERR_UNDEF
     fi
     local val=${(P)1}
@@ -363,15 +363,15 @@ See also: sv_quote, typeset -p, is_packed.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 1 1 $# || return $ZERR_ARGC
-    local typ=`sv_type $1`
+    local typ=`zsh_type $1`
     if [[ $typ == "undef" ]]; then
-        [ $quiet ] || tMsg 0 "sv_tostring: Variable not defined: '$1'."
+        [ $quiet ] || warn 0 "sv_tostring: Variable not defined: '$1'."
         return $ZERR_UNDEF
     fi
     local decl=$(typeset -p "$1" 2>/dev/null) || return $ZERR_UNDEF
@@ -406,7 +406,7 @@ EOF
         -q|--quiet) quiet="-q" ;;
         -f|--format) shift; format=$1 ;;
         --) shift; break ;;
-        *) tMsg 0 "Unrecognized option '$1' (do you need to add '--'?)."
+        *) warn 0 "Unrecognized option '$1' (do you need to add '--'?)."
             return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -456,7 +456,7 @@ EOF
         done
         echo "$encoded"
     else
-        [ $quiet ] || tMsg 0 "str_escape: Unknown format '$format'"
+        [ $quiet ] || warn 0 "str_escape: Unknown format '$format'"
         return $ZERR_ENUM
     fi
 }
@@ -477,7 +477,7 @@ EOF
     local x=${${1#-}#-}
     x="$x:gs/-/_/"
     if ! is_ident "$x"; then
-        tMsg 0 "Invalid identifier '$x' (original: '$1')."
+        warn 0 "Invalid identifier '$x' (original: '$1')."
         return $ZERR_BAD_NAME
     fi
     echo $x
@@ -495,7 +495,7 @@ EOF
     fi
     local x="--"${1:gs/_/-/}
     if ! is_argname "$x"; then
-        tMsg 0 "Invalid argname '$x' (original: '$1')."
+        warn 0 "Invalid argname '$x' (original: '$1')."
         return $ZERR_BAD_NAME
     fi
     echo $x

@@ -24,34 +24,34 @@ testRC() {
     fi
     local expect=$1  # 'PASS', 'FAIL', or a specific number
     shift
-    #tMsg 0 "Running /$*/. ($# args)"
+    #warn 0 "Running /$*/. ($# args)"
     "$@"
     local rc="$?"
     if [[ $expect == 'PASS' ]]; then
         if [[ "$rc" == 0 ]]; then
-            tMsg 1 "PASS: $*"
+            warn 1 "PASS: $*"
             return 0
         else
-            tMsg 0 "FAIL RC: $*\n    expected RC $expect but got $rc."
+            warn 0 "FAIL RC: $*\n    expected RC $expect but got $rc."
             ((FAILCT+=1))
             return $ZERR_TEST_FAIL
         fi
     elif [[ "$expect" == 'FAIL' ]]; then
         if [[ "$rc" == 0 ]]; then
-            tMsg 0 "FAIL RC (unexpected pass): $*"
+            warn 0 "FAIL RC (unexpected pass): $*"
             ((FAILCT+=1))
             return $ZERR_TEST_FAIL
         else
-            tMsg 1 "PASS: $*"
+            warn 1 "PASS: $*"
             return 0
         fi
     else
         if [[ "$rc" == "$expect" ]]; then
-            tMsg 1 "PASS: $*"
+            warn 1 "PASS: $*"
             return 0
         else
-            tMsg 0  "FAIL RC: $*"
-            tMsg 0  "    (expected RC $expect but got $rc)"
+            warn 0 "FAIL RC: $*"
+            warn 0 "    (expected RC $expect but got $rc)"
             ((FAILCT+=1))
             return $ZERR_TEST_FAIL
         fi
@@ -60,16 +60,16 @@ testRC() {
 
 testOutput() {
     if [[ $# < 2 ]]; then
-        tMsg 0 "testOutput: Need >=2 arguments (result, command), not $#."
+        warn 0 "testOutput: Need >=2 arguments (result, command), not $#."
         return 99
     fi
     local expect="$1"
     shift
-    #tMsg 0 "Running: $*" >&2
+    #warn 0 "Running: $*" >&2
     local gotten=`"$@"`
     local rc=$?
     if [[ "$gotten" == "$expect" ]]; then
-        tMsg 1 "PASS: $*"
+        warn 1 "PASS: $*"
         return 0
     fi
     printf "FAIL OUTPUT (rc $rc): $*" >&2
@@ -82,7 +82,7 @@ testOutput() {
 
 testEQ() {
     if [[ $# < 2 ]]; then
-        tMsg 0 "testEq: Need 2 arguments (result, command), not $#."
+        warn 0 "testEq: Need 2 arguments (result, command), not $#."
         return 99
     fi
     local expect="$1"
@@ -90,10 +90,10 @@ testEQ() {
     local gotten=$("$@")
     local rc=$?
     if [[ "$gotten" == "$expect" ]]; then
-        tMsg 1 "PASS: $*"
+        warn 1 "PASS: $*"
         return 0
     fi
-    tMsg 0 "FAIL EQ: $*\n    expected '$expect'\n     but got '$gotten' (and RC $rc)"
+    warn 0 "FAIL EQ: $*\n    expected '$expect'\n     but got '$gotten' (and RC $rc)"
     ((FAILCT+=1))
     return $ZERR_TEST_FAIL
 }

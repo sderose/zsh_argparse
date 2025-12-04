@@ -183,11 +183,11 @@ value passed fits the datatype, or 1 if not. For example, you can say
 When a value doesn't fit the type, a message is also printed
 unless you gave the `-q` option (spelled only that way, sorry).
 
-Do not confused this with the `sv_type` function, which returns the actual
+Do not confused this with the `zsh_type` function, which returns the actual
 zsh base type of a given shell variable, as determined by `typeset`.
 "sv" in the function name is short for "shell variable",
 since of course this function is not limited to associative arrays ("aa").
-The value returned by `sv_type` is one of `undef`, `scalar`, `integer`, `float`, array, assoc -- which are zsh `typeset` types, not patterns for expressing
+The value returned by `zsh_type` is one of `undef`, `scalar`, `integer`, `float`, array, assoc -- which are zsh `typeset` types, not patterns for expressing
 other types in command lines.
 
 

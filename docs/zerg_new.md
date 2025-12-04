@@ -107,48 +107,89 @@ be visible to the shell function that called zerg functions.
 
 ==Storage==
 
-The parser "object" is created as a zsh associative array with
+The parser "object" is stored in a zsh associative array with
 the given name, such as MYPARSER in the example above.
-See [README.md] for a list of what's stored in there. In brief, it
-includes:
 
-* each parser option (without leading hyphens, like `ignore-case-choices]=1`);
+Each argument definition is also stored as an associative array, named
+by the parser that defined it, "__", and the argument's reference (first) name.
+For example, the definition of the "--quiet" option for MYPARSER goes in
+`MYPARSER__quiet`.
 
-* each added argument name and alias (with hyphens included,
-like `[--quiet]=PARSER__quiet` and `[-q]=PARSER__quiet`); and
+Because hyphens are ubiquitous for options but not permitted in zsh variable
+names, option names are often converted
+by dropping leading hyphens and changing internal hyphens to underscores.
+This can be done via `zerg_opt_to_var`. This is done for naming argument
+definitions, so MYPARSER's definition for an "--ignore-case" option would
+be stored in `MYPARSER__ignore_case`. Note that the `--ignore-case` option
+to `parser_new` has nothing to do with like-named options which might be
+defined in a specific zerg parser(s).
 
-* a list of all added argument names and aliases (space-separated,
-like [all_arg_names]=" --quiet -q --verbose -v...").
+The assoc for a parser has 4 kinds of entries:
 
-Each added option definition is stored as another
-associative array. Its name consists of the parser name, plus 2 underscores,
-plus that argument's reference name.
-So the example above will create 3 assocs, as listed below. However, note that
-these will use the `typeset -h` option, so they will not be shown by regular
-`typeset -p`. This is to keep them from cluttering up user's lists. You can
-still see them by giving their full names.
+* An item identifying that the assoc represents a zerg parser. This uses
+a reserved key (available in `$ZERG_CLASS_KEY`, from [zerg_obects.sh]).
+The value is "ZERG_PARSER".
 
-```
-    MYPARSER
-    MYPARSER__quiet
-    MYPARSER__encoding
-```
+* The values of parser-level options (such as`--ignore-case`),
+under their names (as converted by `zerg_opt_to_var`).
 
-Nearly all the options that `zerg_add` takes are the same as for Python
-`argparse.add_argument`, and they're stored in the option's definition assoc
-under those names. Types and actions can also
-be given with their own names, not just under `--type` and `--action`, such as:
+* Each name/alias for an argument gets an item in the parser's associative
+array, named exactly as the option (including hyphens). The corresponding
+value is the name of the applicable argument definition.
 
-```
-    zerg_add MYPARSER "--quiet -q" --store-true --help "Less messages."
-    zerg_add MYPARSER "--encoding" --ident --default 'utf-8'
-        --help "Charset to use."
-```
+* There are a few special entries for space-separated lists of all attribute
+names; all the argument definitions; and all required arguments.
 
-All the argument names and aliases are also added as items in the
-parser object. Each one's value there is the full name of the assoc for
-that definition (such as `MYPARSER__quiet`).
-Aliases all point to the same real definition.
+An example is shown below with the types of entries grouped for readability.
+You can of course display such as assoc once created, using `typeset -p`,
+`aa_export`, etc.
+
+MYPARSER=(
+    [\uEDDA_CLASS]=ZERG_PARSER
+
+    [add_help]=''
+    [allow_abbrev]=1
+    [allow_abbrev_choices]=1
+    [description]=''
+    [description_paras]=''
+    [epilog]=''
+    [help_file]='mycommand.md'
+    [help_tool]='less'
+    [ignore_case]=1
+    [ignore_case_choices]=1
+    [ignore_hyphens]=''
+    [on_redefine]=allow
+    [usage]=''
+    [var_style]=separate
+
+    [--quiet]=MYPARSER__quiet
+    [--verbose]=MYPARSER__verbose
+    [-v]=MYPARSER__verbose
+    [--ignore-case]=MYPARSER__ignore_case
+    [-i]=MYPARSER__i
+
+    [all_arg_names]='--quiet --verbose -v --ignore-case -i '
+    [all_def_names]='PARSER__quiet PARSER__verbose PARSER__ignore_case '
+    [required_arg_names]=''
+)
+
+Option definitions are similar but simpler. The EDDA_CLASS value is
+"ZERG_ARG_DEF" instead of "ZERG_PARSER", and the other entries are just
+the relevant options from `zerg_add`. The argument's names/aliases are not
+speifically listed; they are available by examining the parser object as
+described above.
+
+assoc 'PARSER__quiet':
+  \\uEDDA_CLASS         ZERG_ARG_DEF
+  action                store_true
+  arg_names             "--quiet -q --silent"
+  help                  "Less chatty."
+
+Argument definition can be re-used by other parsers (see `zerg_use` and
+the `--parent` option of `zerg_new`). In such cases, the re-using parser
+has entries for the names, but they point to the original definition (which,
+therefore, should not be deleted). The argument definitions are not redundantly
+copied.
 
 
 ==Re-use==
@@ -156,7 +197,7 @@ Aliases all point to the same real definition.
 Individual arguments, and/or entire parsers, can be re-used.
 
 To re-use one or more arguments in another parser, add them to a new
-parser with `zerg_use` instead of `zerg add`, giving it (like zerg_add)
+parser with `zerg_use` instead of `zerg_add`, giving it
 the name of the new parser you're creating, but followed by just
 the full name for each from the parser(s) where they were already defined:
 
@@ -178,7 +219,8 @@ definition, directly from the very same shell variable holding its
 original definition. Thus you can't change it -- you have to use it as-is.
 
 For convenience, [zerg_setup.sh] sources [zerg_ZERG.sh] provides (well, soon will...) a parser also
-named "ZERG", with commonplace argument definitions:
+named "ZERG", with commonplace argument definitions ("help" is already covered
+by the `zerg_new --add-help` option).
 
 * ZERG__backup
 * ZERG__dry_run
@@ -194,36 +236,3 @@ named "ZERG", with commonplace argument definitions:
 * ZERG__recursive
 * ZERG__verbose
 * ZERG__version
-
-==Provided arguments for CSV-ish file description==
-
-I hold the (perhaps unlikely) hope that *nix's commands that deal with
-will someday add compatibilty among themselves (looking at you,
-cut, paste, colun, awk, join, and several newer sets). To facilitate this,
-zerg_ZERG.sh also defines the following arguments, which are named
-to match ones from Python's csv library
-(re. kebab-case vs. closed forms, see `zerg_new --ignore-punc`):
-
-* ZERG__delimiter (this should perhaps allow the reserved value "SPACES"
-to handle the `awk` default behavior)
-
-* ZERG__double-quote (escape quote-chars by using 2 adjacent quote-chars)
-
-* ZERG__escape-char (commonly backslash)
-
-* ZERG__line-terminator (\n, \r, \r\n; I think this should also accept
-the mnemonics U, M, and D for applicable OS's, respectively)
-
-* ZERG__quote-char (which should accept either a single character, or
-an open/close pair)
-
-* ZERG__quoting (which fields to quote on output; this should accept at least
-NONE, ALL, MINIMAL, NONNUMERIC.
-
-* ZERG__skip-initial-space
-
-* ZERG__multi-delim (not in Python CSV, but indicates that multiple
-adjacent delimiters should count as just one).
-
-* ZERG__header_record (not in Python CSV, but indicates that the first
-record should be a header with field names.

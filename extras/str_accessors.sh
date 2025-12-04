@@ -124,7 +124,7 @@ str_rjust() {  # cf l:expr:s1:s2
     local -i needed=(( $#1 - $2 ))
     if [[ $needed > 0 ]]; then
         fill=$3
-        [ -n $fill ] || fill=" "
+        [ -n "$fill" ] || fill=" "
         while [[ $needed > 0 ]]; do
             x+=$fill
             $needed-=$#fill
@@ -201,7 +201,7 @@ str_rindex() {
         echo ${#pos}
         return 0
     else
-        tMsg 1 "substring not found"
+        warn 1 "substring not found"
         return 1
     fi
 }
@@ -321,7 +321,7 @@ str_index() {
         echo $(( start + ${#pos} ))
         return 0
     else
-        tMsg 1 "substring not found"
+        warn 1 "substring not found"
         return 1
     fi
 }

@@ -38,7 +38,7 @@ Usage: aa_init assoc_name
     with the given name.
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -59,13 +59,13 @@ Usage: aa_clear assoc_name
     The array itself remains defined but becomes empty.
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 1 1 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1"
 
     # Get all keys and unset them
@@ -84,13 +84,13 @@ Usage: aa_copy source_assoc target_assoc
     Initialize the target assoc if it does not exist already.
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local source_assoc="$1" target_assoc="$2"
 
     aa_init "$target_assoc"
@@ -112,13 +112,13 @@ Usage: aa_update target_assoc source_assoc
     Existing keys in target_assoc will be overwritten.
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local target_assoc="$1" source_assoc="$2"
     local -a keys
     keys=(${(k)${(P)source_assoc}})
@@ -136,21 +136,21 @@ aa_set_default() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_setdefault assoc_name key default_value
     Set key to default_value if key does not already exist in the assoc.
-Returns: the existing value or the default value that was set
+Returns: the existing value or the default value that was set.
 EOF
             return ;;
         -q) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 3 3 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type $quiet assoc "$1" || return $ZERR_ZSH_TYPE
     if aa_has "$1" "$2"; then
-        aa_get "$1" "$2"
+        aa_get $quiet "$1" "$2"
     else
-        aa_set "$1" "$2" "$3"
+        aa_set $quiet "$1" "$2" "$3" || return $?
         echo "$3"
     fi
 }
@@ -176,7 +176,7 @@ Note: This can be used on any type, not just associative arrays.
     * undefined: display nothing, return code 0
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -192,21 +192,21 @@ Usage: aa_eq assoc1 assoc2
 Returns: 0 if equal, 1 if different
 EOF
             return ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" assoc "$2" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" assoc "$2" || return $ZERR_ZSH_TYPE
 
-    local -a keys1=(${(k)1}) keys2=(${(k)2})
+    local -a keys1=(${(k)${(P)1}}) keys2=(${(k)${(P)2}})
     [[ ${#keys1[@]} -ne ${#keys2[@]} ]] && return 3
 
     for key in "${keys1[@]}"; do
         #echo "aa_eq $1 vs $2: key '$key'."
-        aa_has "$assoc2" "$key" || return 2
-        [[ "${${(P)1}[$key]1}" == "${${(P)2}[$key]}" ]] || return 1
+        aa_has "$2" "$key" || return 2
+        [[ "${${(P)1}[$key]}" == "${${(P)2}[$key]}" ]] || return 1
     done
     return 0
 }
@@ -222,13 +222,13 @@ Cf:  (( $x[(Ik)key] ))
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" key="$2"
 
     local -a keys=("${(@Pk)assoc_name}")
@@ -250,24 +250,22 @@ Usage: aa_set assoc_name key value
 EOF
             return ;;
         -q) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 3 3 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" key="$2" value="$3"
 
-    # Use parameter expansion to set the value indirectly
-    # (q) the key, b/c (qq) would store the quotes.
-    # But (qq) the value so we don't store backslashes.
-    #tMsg 0 "Evaluating 1: ${assoc_name}[${(q)key}]='${(qq)value}'"
-    local evalString="${assoc_name}[${(q)key}]=${(qq)value}"
-    eval $evalString
+    # The quoting here is very touchy. Be sure to check keys and values
+    # containing nothing, quotes, $, and space.
+    local qvalue=${(qq)value}
+    eval "${assoc_name}[\$key]=$qvalue"
     local rc=$?
     if [ $? != 0 ]; then
-        tMsg 0 "aa_set $1 $2 $3 failed (rc $rc) on eval of $evalString"
+        warn 0 "aa_set $1 $2 $3 failed (rc $rc) on eval of $evalString"
         return 50
     fi
 }
@@ -289,13 +287,13 @@ EOF
             return ;;
         -d|--default) shift; default="$1"; use_default=1 ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" key="$2"
 
     if aa_has $quiet "$assoc_name" "$key"; then
@@ -303,7 +301,7 @@ EOF
     elif [[ -n "$use_default" ]]; then
         echo "$default"
     else
-        [ "$quiet" ] || tMsg 0 "Key '$key' not found in $assoc_name."
+        [ "$quiet" ] || warn 0 "Key '$key' not found in $assoc_name."
         return $ZERR_NO_KEY
     fi
 }
@@ -318,14 +316,19 @@ Note: To unset an entire associative array, just use `unset [name]`.
 EOF
                 return ;;
             -q|--quiet) quiet='-q' ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" key="$2"
+
+    if ! aa_has $quiet "$assoc_name" "$key"; then
+        [ "$quiet" ] || warn 0 "Key '$key' not found in $assoc_name"
+        return $ZERR_NO_KEY
+    fi
     unset "${assoc_name}[${(q)key}]"
 }
 alias aa_del=aa_unset
@@ -352,13 +355,14 @@ EOF
             --isort) isort=1 ;;
             --nsort) nsort=1 ;;
             --reverse) reverse=1 ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 1 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" assoc "$2" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
+    [ -z "$2" ] || [[ `zsh_type "$2"` == assoc ]] || return $ZERR_ZSH_TYPE
     local assoc_name="$1" target_assoc="$2"
 
     if [ $nsort ]; then
@@ -384,7 +388,7 @@ EOF
     fi
 
     if [[ -n "$target_assoc" ]]; then
-        #tMsg 0 "Evaluating 2: typeset -ga $target_assoc=($keys[@])"
+        #warn 0 "Evaluating 2: typeset -ga $target_assoc=($keys[@])"
         eval "typeset -ga $target_assoc=($keys[@])"
     else
         printf '%q ' "${keys[@]}"
@@ -404,13 +408,14 @@ Note: Values containing spaces will be properly quoted.
 EOF
                 return ;;
             --sort) sort=1 ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 1 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
+    [ -z "$2" ] || [[ `zsh_type "$2"` == assoc ]] || return $ZERR_ZSH_TYPE
     local assoc_name="$1" target_assoc="$2"
 
     if [ $sort ]; then
@@ -456,13 +461,13 @@ EOF
             -q|--quiet) quiet='-q' ;;
             --sort) sort=1 ;;
             --width) shift; width=$1 ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 1 1 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local -a keys=(${(k)${(P)1}})
     local lb="" ind="" sep=""
     if [ $lines ]; then lb="\\n"; ind="    "; fi
@@ -540,7 +545,7 @@ EOF
             done
             print -n "$lb)$lb" ;;
         *)
-            tMsg 0 "Unknown format '$format'"
+            warn 0 "Unknown format '$format'"
             return $ZERR_BAD_OPTION ;;
     esac
 }
@@ -561,7 +566,7 @@ Usage: aa_append_value [-s] assoc_name key value
 EOF
                 return ;;
             -s) space=1 ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
@@ -586,25 +591,25 @@ Options:
 EOF
                 return ;;
             -q|--quiet) quiet='-q' ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 4 4 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     if ! aa_has $quiet $1 $2; then
-        [ $quiet ] || tMsg 0 "Associative array $1 has no item '$2'."
+        [ $quiet ] || warn 0 "Associative array $1 has no item '$2'."
         return $ZERR_NO_KEY
     fi
     local orig=${${(P)1}[$2]}
     if [[ $3 -ge 0 ]]; then
-        local offset=$3
+        local -i offset=$3
     else
-        local offset=$(( ${#orig} + $3 + 1 ))
+        local -i offset=$(( ${#orig} + $3 ))
     fi
     if [[ $offset -gt $#orig ]]; then
-        [ $quiet ] || tMsg 0 "Offset $3 is out of range for item $2 of $1."
+        [ $quiet ] || warn 0 "Offset $3 is out of range for item $2 of $1."
         return $ZERR_NO_INDEX
     fi
     local changed=$orig[1,$offset]$4$orig[$offset+1,-1]
@@ -639,30 +644,30 @@ EOF
                 return ;;
             -i|--ignore-case) ic=1 ;;
             -q|--quiet) quiet='-q' ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" partial_key="$2"
 
-    if aa_has -q $assoc_name "$partial_key"; then
+    if [ -z "$ic" ] && aa_has -q $assoc_name "$partial_key"; then
         echo $partial_key
         return 0
     fi
 
-    [ -n $ic ] && partial_key="${partial_key:l}"
+    [ -n "$ic" ] && partial_key="${partial_key:l}"
 
     # Find matches that start with partial_key
     local -a matches exactMatches
     for key in ${(k)${(P)assoc_name}}; do
         local compare_key="$key"
         [[ "$ic" == "1" ]] && compare_key="${key:l}"
-        #tMsg -q "Trying request '$partial_key' vs. key '$key' ($compare_key)."
+        #warn -q "Trying request '$partial_key' vs. key '$key' ($compare_key)."
         if [[ "$compare_key" == $partial_key* ]]; then
-            #tMsg -q "    Adding $key"
+            #warn -q "    Adding $key"
             matches+="$key"
             [[ $compare_key == $partial_key ]] && exactMatches+="$key"
         fi
@@ -679,7 +684,7 @@ EOF
 }
 
 aa_get_abbrev() {
-    local default use_default ic quiet
+    local default_value use_default ic quiet
     while [[ "$1" == -* ]]; do
         case "$1" in
             -h|--help)
@@ -704,14 +709,14 @@ EOF
             -d|--default) shift; default_value="$1"; use_default=1 ;;
             -i|--ignore-case) ic="-i" ;;
             -q|--quiet) quiet='-q' ;;
-            *) tMsg 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;
                 return $ZERR_BAD_OPTION ;;
         esac
         shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" partial_key="$2"
 
     local foundKey=`aa_find_key $quiet $ic "$assoc_name" "$partial_key"`
@@ -719,10 +724,10 @@ EOF
     case $rc in
         0) echo `aa_get "$assoc_name" "$foundKey"`
             return 0 ;;
-        1) [ $use_default ] && echo "$default" && return 0
-            [ $quiet ] || tMsg 0 "Key '$partial_key' not found in $assoc_name";
+        1) [ $use_default ] && echo "$default_value" && return 0
+            [ $quiet ] || warn 0 "Key '$partial_key' not found in $assoc_name";
             return 1 ;;
-        2) [ $quiet ] || tMsg 0 "Key '$partial_key' is ambiguous in $assoc_name"
+        2) [ $quiet ] || warn 0 "Key '$partial_key' is ambiguous in $assoc_name"
             return 2 ;;
     esac
 }

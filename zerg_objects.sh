@@ -25,18 +25,18 @@ EOF
             return ;;
         -f|--force) force=1 ;;
         -q|--quiet) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 2 2 $# || return $ZERR_ARGC
     [ -z "$2" ] || req_zerg_type ident "$2" || return $ZERR_ARGC
-    local svt=`sv_type "$1"`
+    local svt=`zsh_type "$1"`
     if [[ $svt == undef ]]; then
         typeset -A $1
     elif [[ $svt != assoc ]]; then
-        [ $quiet ] || tMsg 0 "sv_quote: Variable '$1' is not an assoc."
+        [ $quiet ] || warn 0 "sv_quote: Variable '$1' is not an assoc."
         return $ZERR_UNDEF
     fi
     if [ -z "$2" ]; then
@@ -44,7 +44,7 @@ EOF
     else
         local zerg_class=${${(P)1}[$ZERG_CLASS_KEY]}
         if [ -n "$zerg_class" ] && [ -z "$force" ]; then
-            [ $quiet ] || tMsg 0 "sv_quote: Variable '$1' already of type '$zerg_class' (consider -f?)."
+            [ $quiet ] || warn 0 "sv_quote: Variable '$1' already of type '$zerg_class' (consider -f?)."
             return $ZERR_UNDEF
         fi
         aa_set $1 $ZERG_CLASS_KEY "$2"
@@ -63,17 +63,17 @@ See also: zerg_set_class.
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 1 1 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local zerg_class=`aa_get "$1" "$ZERG_CLASS_KEY"`
     ### ${${(P)1}[$ZERG_CLASS_KEY]}
     if [ -z "$zerg_class" ]; then
-        [ $quiet ] || tMsg 0 "Assoc '$1' has no zerg class (key '$ZERG_CLASS_KEY')."
+        [ $quiet ] || warn 0 "Assoc '$1' has no zerg class (key '$ZERG_CLASS_KEY')."
         return 1
     fi
     echo $zerg_class
@@ -95,7 +95,7 @@ Note: By convention, the assoc containing the class definition should be named
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -103,7 +103,7 @@ EOF
     req_argc 1 1 $# || return $ZERR_ARGC
     req_zerg_type ident "$1" || return $ZERR_ARGC
     local def_name="__CLASS__$1"
-    sv_type assoc $def_name || return $ZERR_SV_TYPE
+    zsh_type assoc $def_name || return $ZERR_ZSH_TYPE
     echo $def_name
 }
 
@@ -121,13 +121,13 @@ EOF
             return ;;
         -o|--optional) optional=1 ;;
         -q|--quiet) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     req_argc 1 1 $# || return $ZERR_ARGC
-    req_sv_type assoc "$1" || return $ZERR_ARGC
+    req_zsh_type assoc "$1" || return $ZERR_ARGC
     local ec=`zerg_get_class zerg_get_class_def` || return $ZERR_NO_CLASS
     local def_name=`zerg_get_class_def $ec` || return $ZERR_NO_CLASS_DEF
     [ -z "$def_name" ] && [ -n "$optional" ] && return 0  # No def, but ok.
@@ -146,7 +146,7 @@ EOF
         probs+="Missing expected item '$key'. "
     done
     if [ -n "$probs" ]; then
-        [ $quiet ] || tMsg 0 "$probs"
+        [ $quiet ] || warn 0 "$probs"
         return $ZERR_CLASS_CHECK
     fi
 }

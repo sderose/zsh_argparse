@@ -5,7 +5,7 @@ zerg library. It also defines several named return codes and their values.
 
 ===Trace and message support===
 
-tMsg [n] [message] -- display the message to stderr if the message level (stored
+warn [n] [message] -- display the message to stderr if the message level (stored
 in $ZERG_V) is at least as high as n. Also, it fills in a partial
 traceback at the start of the message, for as many levels as $ZERG_TR.
 
@@ -14,11 +14,11 @@ and a loud marker at the start.
 
 ===General functions on shell variables ===
 
-sv_type [varname] -- echo the zsh datatype of the named shell variable,
+zsh_type [varname] -- echo the zsh datatype of the named shell variable,
 as one of: undef, scalar, integer, float, array, assoc.
 See also:  ${(t)name} or ${(tP)name}, which return a hyphen-separated list of
 properties of a given variable. Typical use:
-    if [[ `sv_type path` == "undef" ]]; then...
+    if [[ `zsh_type path` == "undef" ]]; then...
 
 sv_quote [varname] --
 echo the value of the named shell variable, escaped and quoted. Quoting
@@ -72,13 +72,13 @@ These are used throughout zerg as a short, uniform way to test argument and
 other constraints, typically like:
 
     req_argc 1 2 $# || return ZERR_ARGC
-    req_sv_type assoc "$1" || return ZERR_SV_TYPE
+    req_zsh_type assoc "$1" || return ZERR_ZSH_TYPE
 
-req_sv_type [type] [varname] -- test whether the named shell variable is
+req_zsh_type [type] [varname] -- test whether the named shell variable is
 of the given type (one of undef, scalar, integer, float, array, or assoc).
 
 req_zerg_type [type] [value] -- test whether the given value (the second
-argument is *not* a variable name like for `req_sv_type`), is a string
+argument is *not* a variable name like for `req_zsh_type`), is a string
 that satisfies the given zerg type (see `zerg_types.sh` and `zerg_types.md`).
 
 req_aa_has [varname] [key] -- test whether the named variable (which must

@@ -8,7 +8,7 @@ fi
 
 # [help] action is added after generating $zerg_actions_re, because
 # it would collide with --help [message].
-typeset -A zerg_actions=(
+typeset -xHA zerg_actions=(
     [store]=1 [store_const]=0 [store_false]=0 [store_true]=0
     [toggle]=0 [count]=0 [version]=0
     [append]=1 [append_const]=0 [extend]=1
@@ -19,7 +19,7 @@ zerg_actions_re="--"${(j:|--:)${(k)zerg_actions}}
 zerg_actions_re=$zerg_actions_re:gs/_/-/
 zerg_actions[help]=0  # See note above
 
-typeset -A aa_fold_values=( [upper]=1 [lower]=2 [""]=0 )
+typeset -xHA aa_fold_values=( [upper]=1 [lower]=2 [""]=0 )
 
 typeset -a zerg_argdef_fields=(
     arg_names action choices const default dest
@@ -30,9 +30,9 @@ _zerg_argdef_init() {
     # Usage: _zerg_argdef_init def_name arg_names
     # Check for existing definition and deal  ### TODO Factor out, move up?
     local def_name="$1" arg_names="$2"
-    local priorType=`sv_type $def_name`
+    local priorType=`zsh_type $def_name`
     if [[ $priorType == ^(scalar|integer|float|array)$ ]]; then
-        tMsg 0 "Cannot create zerg parser arg '$def_name', variable already exists."
+        warn 0 "Cannot create zerg parser arg '$def_name', variable already exists."
         return $ZERR_DUPLICATE
     elif [[ $priorType == "assoc" ]]; then
         local parser_name=${def_name/__*/}
@@ -42,13 +42,13 @@ _zerg_argdef_init() {
         elif [[ $disp == ignore ]]; then
             return 0
         elif [[ $disp == warn ]]; then
-            tMsg 0 "Warning: Argument def '$def_name' already exists."
+            warn 0 "Warning: Argument def '$def_name' already exists."
             unset "$def_name"
         elif [[ $disp == error ]]; then
-            tMsg 0 "Error: Argument '$def_name' already exists."
+            warn 0 "Error: Argument '$def_name' already exists."
             return $ZERR_DUPLICATE
         else
-            tMsg 0 "Unknown value '$disp' for --on-redefine."
+            warn 0 "Unknown value '$disp' for --on-redefine."
             return $ZERR_ENUM
         fi
     fi
@@ -99,7 +99,7 @@ actual arguments to you shell function don't get re-parsed):
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -112,12 +112,12 @@ EOF
     local arg_names="$2"
     local -a arg_names_list=(${(z)arg_names})  # split on whitespace
     if [[ $#arg_names_list -eq 0 ]]; then
-        [ $quiet ] || tMsg 0 "No option name(s) provided."
+        [ $quiet ] || warn 0 "No option name(s) provided."
         return $ZERR_BAD_NAME
     fi
     for arg_name in $arg_names_list; do
         if ! is_argname "$arg_name"; then
-            [ $quiet ] || tMsg 0 "Option name to add is invalid: '$arg_name'."
+            [ $quiet ] || warn 0 "Option name to add is invalid: '$arg_name'."
             return $ZERR_BAD_NAME
         fi
     done
@@ -130,31 +130,31 @@ EOF
 
     # Parse options making up this argument definition
     while [[ $# -gt 0 ]]; do
-        tMsg 1 "Args are now: #${(j:#:)@}#."
+        warn 1 "Args are now: #${(j:#:)@}#."
         local name=`zerg_opt_to_var "$1"`
-        #tMsg 1 "Arg '$1' (->$name)."
+        #warn 1 "Arg '$1' (->$name)."
         case "$1:l" in
             --type|-t)
                 shift
                 name=`zerg_opt_to_var "$1"`
-                #tMsg 0 "Type '$name' for def $def_name."
+                #warn 0 "Type '$name' for def $def_name."
                 aa_has zerg_types "$name" || return $ZERR_ENUM
                 aa_set $def_name type "$name" ;;
 
             ${~zerg_types_re})
-                #tMsg 0 "Type '$name' for def $def_name."
+                #warn 0 "Type '$name' for def $def_name."
                 aa_set $def_name type "$name" ;;
 
             --action|-a)
                 shift
                 name=`zerg_opt_to_var "$1"`
-                #tMsg 0 "Action '$name' for def $def_name."
+                #warn 0 "Action '$name' for def $def_name."
                 aa_has zerg_actions "$name" || return $ZERR_ENUM
                 aa_set $def_name action "$name" ;;
 
             # following does not include --help, to avoid conflict.
             ${~zerg_actions_re})
-                #tMsg 0 "Action '$name' for def $def_name."
+                #warn 0 "Action '$name' for def $def_name."
                 aa_set $def_name action "$name" ;;
 
             --help|-h)
@@ -205,10 +205,10 @@ EOF
             --required|-r)
                 aa_set $def_name required "1" ;;
             -*)
-                [ $quiet ] || tMsg 0 "Unknown option '$1'."
+                [ $quiet ] || warn 0 "Unknown option '$1'."
                 return $ZERR_BAD_OPTION ;;
             *)
-                [ $quiet ] || tMsg 0 "Unexpected positional argument '$1'."
+                [ $quiet ] || warn 0 "Unexpected positional argument '$1'."
                 return $ZERR_BAD_OPTION ;;
         esac
         shift;
@@ -242,7 +242,7 @@ EOF
         local ref_name=${def_name#[^_]*__}
         local neg_ref_name="no_$ref_name"
         local neg_def_name="${parser_name}__$neg_ref_name"
-        #tMsg 0 "ref $ref_name, neg_ref $neg_ref_name, neg_def $neg_def_name."
+        #warn 0 "ref $ref_name, neg_ref $neg_ref_name, neg_def $neg_def_name."
         typedef -ghA "$neg_def_name"
         local dft_dest=$ref_name[${#parser_name}+2,-1]
         aa_set $neg_def_name dest $dft_dest
@@ -272,7 +272,7 @@ EOF
 _zerg_negate_opt_name() {
     #  --ignore-case --> --no-ignore-case;  -i --> +i
     if ! is_argname "$1"; then
-        tMsg 0 "Not an argname: '$1'."
+        warn 0 "Not an argname: '$1'."
         return $ZERR_ZTYPE_VALUE
     fi
     if [[ $1 =~ ^-- ]]; then
@@ -339,7 +339,7 @@ EOF
     local parser_name=$1
     shift
 
-    tMsg 0 "zerg_use not yet fully supported."
+    warn 0 "zerg_use not yet fully supported."
     while [ -n "$1" ]; do
         req_zerg_class ZERG_ARG_DEF "$1" || return $?
         local arg_names=`aa_get $1 "arg_names"`

@@ -11,7 +11,7 @@ set/get it using `zerg_set_class` and `zerg_get_class`.
 
 Much like for zsh and zerg types, you can test whether a particular variable
 is of a given object class:
-    is_of_sv_type assoc myVar
+    is_of_zsh_type assoc myVar
     is_of_zerg_type path -w myVar
     is_of_zerg_class PARSER myVar
 

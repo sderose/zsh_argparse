@@ -18,14 +18,14 @@ ar_init() {
 
 ar_clear() {
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     typeset -a $1
     : ${(P)1::=()}
 }
 
 ar_copy() {
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     return ZERR_NOT_YET
 }
 
@@ -35,13 +35,13 @@ ar_copy() {
 #
 ar_len() {
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     echo ${(P)#1}
 }
 
 ar_eq() {
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     [[ ${(P)#1} -eq ${(P)#2} ]] || return 1
     local i
     for (i=1; i<=$(P)#1}; i++); do
@@ -52,7 +52,7 @@ ar_eq() {
 
 ar_has() {  ## cf ar_find? if (( $x[(Ie)value] ));
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     for (i=1; i<=$(P)#1}; i++); do
         [[ ${${(P)1}[$i]} -eq $2 ]] && return 0
     done
@@ -71,12 +71,12 @@ EOF
         return 0
     fi
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     req_aa_has zerg_types "$2" || return ZERR_ENUM
     local -i nitems=$(P)#1}
     for (i=1; i<=$nitems; i++); do
         local item=${${(P)1}[$i]}
-        [ is_of+sv_type $1 $2 ] || return 1
+        [ is_of+zsh_type $1 $2 ] || return 1
     done
     return 0
 }
@@ -87,13 +87,13 @@ EOF
 #
 ar_set() {
     req_argc 3 3 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     return ZERR_NOT_YET
 }
 
 ar_get() {
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     req_zerg_type integer "$2" || return ZERR_ZERG_TVALUE
     # slicing
     return ZERR_NOT_YET
@@ -101,7 +101,7 @@ ar_get() {
 
 ar_unset() {
     req_argc 2 2 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     req_zerg_type integer "$2" || return ZERR_ZERG_TVALUE
     return ZERR_NOT_YET
 }
@@ -114,7 +114,7 @@ ar_append() {
 
 ar_insert() {
     req_argc 3 3 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     req_zerg_type integer "$2" || return ZERR_ZERG_TVALUE
     return ZERR_NOT_YET
 }
@@ -125,13 +125,13 @@ ar_insert() {
 #
 ar_values() {  # TODO Or keys?
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     return ZERR_NOT_YET
 }
 
 ar_find_value() {
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     local -i nitems=$(P)#1}
     for (i=1; i<=$nitems; i++); do
         local item=${${(P)1}[$i]}
@@ -145,7 +145,7 @@ ar_find_value() {
 
 ar_count() {
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     local -i nitems=$(P)#1} nfound=0
     for (i=1; i<=$nitems; i++); do
         local item=${${(P)1}[$i]}
@@ -156,7 +156,7 @@ ar_count() {
 
 ar_export() {
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     return ZERR_NOT_YET
 }
 
@@ -166,7 +166,7 @@ ar_export() {
 #
 ar_sort() {  # TODO Does this change externality, etc?
     req_argc 1 1 $# || return ZERR_ARGC
-    req_sv_type array "$1" || return ZERR_SV_TYPE
+    req_zsh_type array "$1" || return ZERR_ZSH_TYPE
     local -a tmp=(${(o)1})
     typeset -a $1
     : ${(P)1::=($tmp)}

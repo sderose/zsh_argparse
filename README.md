@@ -58,31 +58,30 @@ to format and display it (default: the user's $EDITOR or `less`).
 
 The first argument is the parser name, and the second one is special:
 It must be a space-separated
-list of names for the argument being defined. This is different from
-Python `argparse`, where each synonym/alias is given separately.
-I always quote this argument, to be most readable by emphasizing that it's
-not an option to `zerg_add`, but the name of an option you're defining.
+list of names for the argument being defined (this is different from
+Python `argparse`).
+I always quote this argument, to emphasize that it's
+not an option to `zerg_add`, but the name(s) of an option you're defining.
 
-After the name(s) come options that define the argument being created. These
-are almost the same as in Python `argparse` (except, of course, for using
-the usual shell syntax of leading hyphens, no commas, etc). The most common
-may be `action`, `type`, `default`, and `help`.
+After the name(s) come options for the argument being created. These
+are almost the same as in Python `argparse` (except for using
+customary shell syntax). The most common ones
+may be `type`, `action`, `default`, and `help`.
 
 3a: There is an (experimental) shorthand syntax for adding arguments, that may
 be packed straight onto `zerg_new` instead of using `zerg_add` separately for each
 as just shown. It supports names and aliases, a type or action
-(including choices values), defaults, and help strings. If used, these
+(including choice values), defaults, and help strings. If used, these
 declarations should be placed after "--" to clearly separate them from `zerg_new`
 options. Each should be quoted (lots of special characters in there).
-Names and aliases don't need the leading hyphen (for single-character names) or
-hyphens (for longer names).
-
-For example:
+Names and aliases don't include the leading hyphen (for single-character names)
+or hyphens (for longer names). For example:
 
 ```
     parser_new MYPARSER -- \
-      'quiet|q:store_true[Show fewer messages]' \
+      'max:int=10[Stop after this many errors]' \
       'out:path=foo.log[Where to write results]' \
+      'quiet|q:store_true[Show fewer messages]' \
       'format:choice(xml,json,yaml)[Output format]'
 ```
 
@@ -92,7 +91,7 @@ or in separate variables named for each option (choose which way by
 using the `--var_style` option on `parse_new`).
 Errors such as unrecognized option or a value not matching what is required
 for a given option, are reported, and cause zerg_parse to return a
-non-zero return code, which you may use to exit your function as shown.
+non-zero return code, which you may use to leave your function if desired:
 
 ```
     zerg_parse MYPARSER "$@" || return $?
@@ -109,11 +108,15 @@ non-zero return code, which you may use to exit your function as shown.
     zerg_del MYPARSER
 ```
 
+*Note*: Zerg functions themselves do not (yet) benefit from zerg for things
+like recognizing option abbreviations. For example, you can't say just
+`--descr`, etc.
+
 
 ==Zerg storage==
 
 zerg creates shell variable(s) for the parser itself and each distinct argument,
-These set zsh's "hidden" flag, so they
+These set typeset's -H (hidden) flag, so they
 won't show up in a generic list of variables (such as from just `typeset -p`).
 Results from parsing actual command line arguments can be stored either in
 one more associative array, or in separate scalar variables.
@@ -122,7 +125,7 @@ Because shell functions are executed within the same shell that invoked them
 (rather than a new sub-shell), the storage stays around.
 You can dispose of a parser object and any argument
 definitions it owns, with `zerg_del [parser_name]`.
-Or you can keep it around (which makes sense for commands likely to be re-used),
+Or you can keep it around (say, for commands likely to be re-used)
 and save time by re-using rather than re-creating it:
 
 ```
@@ -133,61 +136,29 @@ and save time by re-using rather than re-creating it:
     zerg_parse MYPARSER...
 ```
 
-===Parser storage===
+===Parser and Argument definition storage===
 
 A parser is stored as a zsh associative array with the given name
-(`MYPARSER` in the example above). These are created as global (`-x`)
-and hidden (`-H`). The associative array has 4 kinds of entries:
+(`MYPARSER` in the examples above).
 
-* An item identifying that the assoc represents zerg parser, under
-a constant key available in `$ZERG_CLASS_KEY` (from [zerg_obects.sh]).
-The value is ZERG_PARSER.
-The first character is U+EDDA, a private-use Unicode character.
-* Parser-level options (such as`--ignore-case`) are stored in the parser assoc,
-under their names converted by removing leading hyphens and converting others
-to underscores; similar to what Python does for storing argument values.)
-* Arguments added to the parser have all their names as items in the parser assoc
-(including hyphens). Each argument's definition is stored as a separate
-associative array. That array's name consists of the name of the parser
-that defined it, "__", and the argument's reference (first) name. For example,
-the definition of the "quiet" option for MYPARSER would be stored in
-`MYPARSER__quiet`. The name does not include leading hyphens, and any
-internal hyphens are changed to "_".
-* There are aslo reserved entries for space-separated lists of all attribute names;
-for all the assocs for argument definitions; and for all required arguments.
+Each argument definition is also stored as an associative array, named
+by the parser that defined it, "__", and the argument's reference (first) name.
+For example, the definition of the "--ignore-case" option would be stored
+in `MYPARSER__ignore_case` (hyphens are not permitted in zsh variable names).
 
-An example is shown below with the types of entries grouped for readability:
+`zerg_parse` stores results in one of two ways (chosen by the `--var-style`
+option of zerg_new). First, as a separate local variable named for each
+option's reference name (with leading hyphens removed and internal ones
+changed to underscores). Or second, in another associative array, named by
+the parser name plus "__results", which contains an item for each option,
+named as just described. However, zsh can't store arrays or assocs in other
+arrays or assocs, so with `--action append` multiple values are joined into
+one strings, separated by spaces.
 
-MYPARSER=(
-    [\uEDDA_CLASS]=ZERG_PARSER
+The associative arrays are created as global (`-g`) and hidden (`-H`).
 
-    [add_help]=''
-    [allow_abbrev]=1
-    [allow_abbrev_choices]=1
-    [description]=''
-    [description_paras]=''
-    [epilog]=''
-    [help_file]='mycommand.md'
-    [help_tool]='less'
-    [ignore_case]=1
-    [ignore_case_choices]=1
-    [ignore_hyphens]=''
-    [on_redefine]=allow
-    [usage]=''
-    [var_style]=separate
 
-    [--quiet]=MYPARSER__quiet
-    [--verbose]=MYPARSER__verbose
-    [--ignore-case]=MYPARSER__ignore_case
-    [-i]=MYPARSER__i
-    [-v]=MYPARSER__verbose
-
-    [all_arg_names]='--quiet --verbose -v --ignore-case -i '
-    [all_def_names]='PARSER__quiet PARSER__verbose PARSER__ignore_case '
-    [required_arg_names]=''
-)
-
-===Argument definition storage===
+===storage===
 
 You add arguments to a parser with `zerg_add`, which is very like Python's
 `parser.add_argument()`.
@@ -225,7 +196,7 @@ zerg_setup.sh, or pass it as an option owhen sourcing zerg_setup.sh.
 * ZERG_DEBUG should make zerg re-load dependencies each time.
 
 * ZERG_STACK_LEVELS sets how many layers of stack trace are printed with
-tMsg messages (tMsg is also defined in [zerg_setup.sh]).
+warn messages (warn is also defined in [zerg_setup.sh]).
 
 
 ==zerg types==
@@ -325,7 +296,7 @@ indicated return code values (these variables are defined in `zerg_setup.sh`).
 
     * $ZERR_EVAL_FAIL (99): An 'eval' failed.
     * $ZERR_ARGC (98): Wrong number of arguments
-    * $ZERR_SV_TYPE (97): Value is not of required zsh/typeset type
+    * $ZERR_ZSH_TYPE (97): Value is not of required zsh/typeset type
     * $ZERR_ZTYPE_VALUE (96): Value does not match specified zerg type
     * $ZERR_BAD_OPTION (95): Unrecognized option name
     * $ZERR_ENUM (94): Value does not match the expected enum

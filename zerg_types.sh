@@ -10,7 +10,7 @@ fi
 # an unsigned or logprob being in a given numeric range.
 # See the doc re. possible additions.
 #
-typeset -Ah zerg_types=(
+typeset -xhA zerg_types=(
     [int]=int [hexint]=int [octint]=int [binint]=int [anyint]=int
     [unsigned]=int [pid]=int [bool]=bool
     [float]=float [prob]=float [logprob]=float
@@ -28,7 +28,7 @@ typeset -Ah zerg_types=(
 )
 # turn that list into a 'case' expr --int|--hexint....
 zerg_types_re="--"${(j:|--:)${(ko)zerg_types}}
-#tMsg 0 "_types_re: $_types_re"
+#warn 0 "_types_re: $_types_re"
 
 _sign_re="[-+]"
 _uns_re="[0-9]+"
@@ -72,20 +72,20 @@ Returns: 0 if valid, $ZERR_NOT_OF_TYPE (1) if not.
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'.";
+        *) warn 0 "Unrecognized option '$1'.";
             return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     if ! is_zergtypename $quiet "$1"; then
-        tMsg 0 "'$1' is not a recognized zerg type name."
+        warn 0 "'$1' is not a recognized zerg type name."
         return $ZERR_ENUM
     fi
     local test_func="is_${(L)1}"
     $test_func $quiet "$2"
     if [[ $? -ne 0 ]]; then
-        [ $quiet ] || tMsg 0 "'$2' does not represent type '$1'."
+        [ $quiet ] || warn 0 "'$2' does not represent type '$1'."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -103,7 +103,7 @@ See also: zerg_get_class.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -132,7 +132,7 @@ is_char() {
     (( $#value == 1 )) && return 0
     local count=$(print -rn -- "$1" | wc -m | tr -d ' ')
     (( $count == 1 )) && return 0
-    # [ $quiet ] || tMsg 0 "'$1' is not a single character."
+    # [ $quiet ] || warn 0 "'$1' is not a single character."
     return $ZERR_NOT_OF_TYPE
 }
 
@@ -140,7 +140,7 @@ is_ident() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ ^($_ident_re)$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not an identifier."
+        # [ $quiet ] || warn 0 "'$1' is not an identifier."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -149,7 +149,7 @@ is_idents() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ ^($_ident_re([[:space:]]+$_ident_re)*)$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a space-separated identifier(s)."
+        # [ $quiet ] || warn 0 "'$1' is not a space-separated identifier(s)."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -158,7 +158,7 @@ is_uident() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ ^($_uident_re)$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a Unicode identifier."
+        # [ $quiet ] || warn 0 "'$1' is not a Unicode identifier."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -167,7 +167,7 @@ is_uidents() {
     local quiet="" ident_expr="[a-zA-Z_][a-zA-Z0-9_]*"
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ ^($_uident_re([[:space:]]+$_uident_re)*)$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a space-separated Unicode identifier(s)."
+        # [ $quiet ] || warn 0 "'$1' is not a space-separated Unicode identifier(s)."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -178,7 +178,7 @@ is_argname() {
     # TODO Switch to allow -q and also --?
     [ $# -eq 1 ] || return ZERR_ARGC
     if [[ -z "$1" ]] || ! [[ "$1" =~ ^($_argname_re)$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid --option-name."
+        # [ $quiet ] || warn 0 "'$1' is not a valid --option-name."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -188,7 +188,7 @@ is_cmdname() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     whence "$1" >/dev/null
     if [[ $? -ne 0 ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not an available command-name."
+        # [ $quiet ] || warn 0 "'$1' is not an available command-name."
         return $ZERR_NOT_OF_TYPE
     fi
     return $@
@@ -207,7 +207,7 @@ is_varname() {
     # In that case existence check is not needed, as 'undef' is a type.
     # To check just for being a possible variable name, use is_ident.
     [ -z "$2" ] && [ -v "$1" ] && return $?
-    sv_type "$2" "$1" && return $?
+    zsh_type "$2" "$1" && return $?
 }
 
 is_objname() {
@@ -259,7 +259,7 @@ is_regex() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! check_re "$1"; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid regular expression."
+        # [ $quiet ] || warn 0 "'$1' is not a valid regular expression."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -290,7 +290,7 @@ EOF
         -d|-e|-f|-r|-w|-x|-N) typeset $1[2:-1]=1 ;;
         --new|--forcible) typeset $1[3:-1]=1 ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -298,25 +298,25 @@ EOF
     # Simplistic path validation
     local pathExpr="^/?[-._$~#[:alnum:]]*(/[-._$~#[:alnum:]]*)*$"
     if [ -z "$loose" ] && [[ ! "$1" =~ ($pathExpr) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' does not appear to be a valid path."
+        # [ $quiet ] || warn 0 "'$1' does not appear to be a valid path."
         return $ZERR_NOT_OF_TYPE
     fi
 
     for perm in d e f r w x N; do
         if [ ${(P)$perm} ] && ! [ -$perm "$pathExpr" ]; then
-            # [ $quiet ] || tMsg 0 "Path $pathExpr does not satisfy -$perm."
+            # [ $quiet ] || warn 0 "Path $pathExpr does not satisfy -$perm."
             return $ZERR_NOT_OF_TYPE
         fi
     done
     if [ $new ] || [ $forcible ]; then
         local container="$pathExpr:h"
         if ! [ -d "$pathExpr:h" ]; then
-            # [ $quiet ] || tMsg 0 "Parent dir of path $pathExpr does not exist."
+            # [ $quiet ] || warn 0 "Parent dir of path $pathExpr does not exist."
             return $ZERR_NOT_OF_TYPE
         fi
         [ $forcible ] && [ -w "$pathExpr" ] && return 0
         [ $new ] && ! [ -e "$pathExpr" ] && return 0
-        # [ $quiet ] || tMsg 0 "Path $pathExpr does not satisfy --new or --forcible."
+        # [ $quiet ] || warn 0 "Path $pathExpr does not satisfy --new or --forcible."
         return $ZERR_NOT_OF_TYPE
     fi
     return 0
@@ -328,7 +328,7 @@ is_url() {
     # Basic url validation: scheme:rest. TODO: tighten up
     local expr="^[a-zA-Z][a-zA-Z0-9+.-]*:.+"
     if ! [[ "$1" =~ ($expr) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid url."
+        # [ $quiet ] || warn 0 "'$1' is not a valid url."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -337,7 +337,7 @@ is_encoding() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! iconv -l | tr ' ' '\012' | grep "^$1\$" >/dev/null; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a recognized encoding."
+        # [ $quiet ] || warn 0 "'$1' is not a recognized encoding."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -346,7 +346,7 @@ is_locale() {
     local quiet="" locale_dir="/usr/share/locale/"
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [ -d "$locale_dir" ] && ! [ -d "$locale_dir/$1" ]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a installed locale."
+        # [ $quiet ] || warn 0 "'$1' is not a installed locale."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -357,7 +357,7 @@ is_lang() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [[ ! "$1" =~ ^($nix_lang_re|$rfc_lang_re) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid language code."
+        # [ $quiet ] || warn 0 "'$1' is not a valid language code."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -367,9 +367,9 @@ is_format() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     local expr='%[-+0 #]*(\*|[0-9]+)?(\.(\*|[0-9]+))?'
     expr+='[hlLqjzt]*[diouxXeEfFgGaAcspn%]'
-    #tMsg 0 "format expr: $expr."
+    #warn 0 "format expr: $expr."
     if [[ ! "$1" =~ ^($expr)$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid % format code."
+        # [ $quiet ] || warn 0 "'$1' is not a valid % format code."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -381,7 +381,7 @@ is_int() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [[ ! "$1" =~ (^${_int_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid integer."
+        # [ $quiet ] || warn 0 "'$1' is not a valid integer."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -390,7 +390,7 @@ is_unsigned() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [[ ! "$1" =~ (^${_uns_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid insigned integer."
+        # [ $quiet ] || warn 0 "'$1' is not a valid insigned integer."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -399,7 +399,7 @@ is_octint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [[ ! "$1" =~ (^${_oct_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid octal integer."
+        # [ $quiet ] || warn 0 "'$1' is not a valid octal integer."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -408,7 +408,7 @@ is_hexint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if [[ ! "$1" =~ (^${_hex_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid hexadecimal integer."
+        # [ $quiet ] || warn 0 "'$1' is not a valid hexadecimal integer."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -417,7 +417,7 @@ is_binint() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
    if [[ ! "$1" =~ (^${_bin_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid binary integer."
+        # [ $quiet ] || warn 0 "'$1' is not a valid binary integer."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -429,7 +429,7 @@ is_anyint() {
     if is_int -q "$1" || is_octint -q "$1" || is_hexint -q "$1" || is_binint -q "$1"; then
         return 0
     else
-        # [ $quiet ] || tMsg 0 "'$1' is not an integer (999/0xFF/07777/0B1011)."
+        # [ $quiet ] || warn 0 "'$1' is not an integer (999/0xFF/07777/0B1011)."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -446,22 +446,22 @@ EOF
             return ;;
         -a|--active) active=1 ;;
         -q|--quiet) quiet='-q';;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     if ! is_unsigned - "$1"; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid process id number."
+        # [ $quiet ] || warn 0 "'$1' is not a valid process id number."
         return $ZERR_NOT_OF_TYPE
     fi
     if ! ps -p "$1" >/dev/null; then
-        # [ $quiet ] || tMsg 0 "'$1' is not an active process."
+        # [ $quiet ] || warn 0 "'$1' is not an active process."
         return $ZERR_NOT_OF_TYPE
     fi
     if [[ -n "$active" ]]; then  # Test if we can signal it
         if ! kill -0 "$1" 2>/dev/null; then
-            # [ $quiet ] || tMsg 0 "Process '$1' exists but is not signalable."
+            # [ $quiet ] || warn 0 "Process '$1' exists but is not signalable."
             return $ZERR_NOT_OF_TYPE
         fi
     fi
@@ -471,7 +471,7 @@ is_float() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ (^${_float_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid float."
+        # [ $quiet ] || warn 0 "'$1' is not a valid float."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -480,10 +480,10 @@ is_prob() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ (^${_float_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid probability."
+        # [ $quiet ] || warn 0 "'$1' is not a valid probability."
         return $ZERR_NOT_OF_TYPE
     elif ! (( $(echo "$1 >= 0.0 && $1 <= 1.0" | bc -l) )); then
-        # [ $quiet ] || tMsg 0 "'$1' must be between 0.0 and 1.0."
+        # [ $quiet ] || warn 0 "'$1' must be between 0.0 and 1.0."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -496,10 +496,10 @@ is_logprob() {
     # bc can't handle +x. we ignore "++x".
     [[ "$value[1]" == "+" ]] && value=$value[2,-1]
     if ! is_float -q "$value"; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid float."
+        # [ $quiet ] || warn 0 "'$1' is not a valid float."
         return $ZERR_NOT_OF_TYPE
     elif ! (( $(echo "$value <= 0.0" | bc -l) )); then
-        # [ $quiet ] || tMsg 0 "'$1' must be <= 0.0."
+        # [ $quiet ] || warn 0 "'$1' must be <= 0.0."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -508,7 +508,7 @@ is_complex() {
     local quiet
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! [[ "$1" =~ (^${_complex_re}$) ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid complex."
+        # [ $quiet ] || warn 0 "'$1' is not a valid complex."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -536,7 +536,7 @@ EOF
             return ;;
         --shape) shift; shape="$1" ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'.";
+        *) warn 0 "Unrecognized option '$1'.";
             return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -548,7 +548,7 @@ EOF
         for dim in $dims; do
             is_int -q "$dim" && continue
             [[ "$dim" == "*" ]] && continue
-            # [ $quiet ] || tMsg 0 "Tensor shape '$shape' has bad dim '$dim'."
+            # [ $quiet ] || warn 0 "Tensor shape '$shape' has bad dim '$dim'."
             return $ZERR_NOT_OF_TYPE
         done
     fi
@@ -559,7 +559,7 @@ EOF
     local -a current_sizes
     local -i n=$#items
     if [[ $items[1] != '(' ]] || [[ $items[-1] != ')' ]]; then
-        # [ $quiet ] || tMsg 0 "Tensor not parenthesized: '$1'."
+        # [ $quiet ] || warn 0 "Tensor not parenthesized: '$1'."
         return $ZERR_NOT_OF_TYPE
     fi
     for (( i=1; i<=$#items; i++ )); do
@@ -570,24 +570,24 @@ EOF
         elif [[ $tok == ")" ]]; then
             if [ -n "$dims"[$depth] ] && [[ $dims[$depth] != "*" ]]; then
                 if (( current_sizes[$depth] != $dims[$depth] )); then
-                    # [ $quiet ] || tMsg 0 "Dim $depth is length $current_sizes[$depth], not $dims[$depth] at token $i of tensor."
+                    # [ $quiet ] || warn 0 "Dim $depth is length $current_sizes[$depth], not $dims[$depth] at token $i of tensor."
                     return $ZERR_NOT_OF_TYPE
                 fi
             fi
             depth-=1
             if (( $depth < 0 )); then
-                # [ $quiet ] || tMsg 0 "Extra ')' at token $i of tensor."
+                # [ $quiet ] || warn 0 "Extra ')' at token $i of tensor."
                 return $ZERR_NOT_OF_TYPE
             fi
         elif is_float $tok; then
             current_sizes[$depth]+=1
         else
-            # [ $quiet ] || tMsg 0 "Unrecognized token '$tok' in tensor."
+            # [ $quiet ] || warn 0 "Unrecognized token '$tok' in tensor."
             return $ZERR_NOT_OF_TYPE
         fi
     done
     if (( $depth != 0 )); then
-        # [ $quiet ] || tMsg 0 "Imbalanced parentheses in tensor."
+        # [ $quiet ] || warn 0 "Imbalanced parentheses in tensor."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -609,7 +609,7 @@ EOF
             return ;;
         --loose) loose=1 ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'.";
+        *) warn 0 "Unrecognized option '$1'.";
             return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -626,17 +626,17 @@ EOF
             0|false|no|off|f|n) return 0 ;;
         esac
     fi
-    # [ $quiet ] || tMsg 0 "'$value' is not a boolean."
+    # [ $quiet ] || warn 0 "'$value' is not a boolean."
     return $ZERR_NOT_OF_TYPE
 }
 
 # Time/date type validation functions
 # TODO Add locale forms? locale forms: %c datetime, %x date, %X time
 # if strftime -s timestamp -r '%c' "$datestring" 2>/dev/null; then
-#     tMsg info "Valid date/time: $datestring -> $timestamp"
+#     warn info "Valid date/time: $datestring -> $timestamp"
 #     return 0
 # else
-#     tMsg error "Invalid date/time: $datestring"
+#     warn error "Invalid date/time: $datestring"
 #     return $ZERR_NOT_OF_TYPE
 # fi
 #
@@ -645,7 +645,7 @@ is_time() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     # Basic time format: HH:MM:SS.mmm-05:30 (truncations ok)
     if [[ ! "$1" =~ ^$_time_re($_zone_re)?$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid time (HH:MM or HH:MM:SS)."
+        # [ $quiet ] || warn 0 "'$1' is not a valid time (HH:MM or HH:MM:SS)."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -655,7 +655,7 @@ is_date() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     # Validate ISO8601 date format
     if ! [[ "$1" =~ ^$_date_re$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid ISO8601 date."
+        # [ $quiet ] || warn 0 "'$1' is not a valid ISO8601 date."
         return $ZERR_NOT_OF_TYPE
     fi
     return 0
@@ -674,7 +674,7 @@ is_datetime() {
     [[ $#parts == 2 ]] || return $ZERR_NOT_OF_TYPE
     if ! date -d "$1" "+%s" &>/dev/null 2>&1 &&
        ! date -j -f "%Y-%m-%dT%H:%M:%S" "$1" "+%s" &>/dev/null 2>&1; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid ISO8601 datetime."
+        # [ $quiet ] || warn 0 "'$1' is not a valid ISO8601 datetime."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -684,7 +684,7 @@ is_duration() {
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     # ISO duration:
     if [[ $#1 -lt 2 ]] || ! [[ "$1" =~ ^${_duration_re}$ ]]; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid ISO duration."
+        # [ $quiet ] || warn 0 "'$1' is not a valid ISO duration."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -694,7 +694,7 @@ is_epoch() {
     local quiet=""
     [[ "$1" == "-q" ]] && quiet='-q' && shift
     if ! is_float -q "$1"; then
-        # [ $quiet ] || tMsg 0 "'$1' is not a valid epoch timestamp."
+        # [ $quiet ] || warn 0 "'$1' is not a valid epoch timestamp."
         return $ZERR_NOT_OF_TYPE
     fi
 }
@@ -714,7 +714,7 @@ EOF
             return ;;
         --delim) shift; delim="$1" ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -761,22 +761,22 @@ EOF
             return ;;
         --zshtype) shift; zshtype=$1 ;;
         -q|--quiet) quiet='-q' ;;
-        *) tMsg 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     if [[ "$1" =~ (\;) ]]; then
-        tMsg 0 "Semicolon is not allowed in packed values."
+        warn 0 "Semicolon is not allowed in packed values."
         return $ZERR_ZTYPE_VALUE
     fi
     local _typeset_re='(typeset|export)( -[a-zA-Z]+)? [_[:alnum:]]+='
     [[ "$1" =~ ^${_typeset_re}$ ]] || return $ZERR_NOT_OF_TYPE
 
     local rhs=`_extract_rhs "$1"`
-    tMsg 0 "Arg is '$1', rhs '$rhs', zshtype '$zshtype'."
+    warn 0 "Arg is '$1', rhs '$rhs', zshtype '$zshtype'."
     if [ -z "$zshtype" ]; then
-        tMsg 0 "Got no specific --zshtype."
+        warn 0 "Got no specific --zshtype."
         if [[ $rhs[1] == "(" ]]; then
             ( local -a test="$rhs" ) 2>/dev/null && return 0
             ( local -A test="$rhs" ) 2>/dev/null && return 0
@@ -795,7 +795,7 @@ EOF
     elif [[ $zshtype == undef ]]; then
         [[ "$rhs" =~ ^(typeset: no such variable) ]]; return $?
     else
-        tMsg 0 "'$1' is not a valid zsh/typeset type name."
+        warn 0 "'$1' is not a valid zsh/typeset type name."
         return $ZERR_BAD_OPTION
     fi
 }
