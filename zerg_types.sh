@@ -756,7 +756,7 @@ Options:
     only (packed forms of) assocs and arrays are accepted (since anything
     passes as a scalar, meaning there would be nothing to test).
 Notes: This is experimental.
-See also: sv_tostring.
+See also: zsh_tostring.
 EOF
             return ;;
         --zshtype) shift; zshtype=$1 ;;

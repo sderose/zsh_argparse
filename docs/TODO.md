@@ -96,7 +96,7 @@ like (-h|-he|-hel|-help)....
 
 * Allow changing the negation prefix?
 
-* Support `quoting` setting for `sv_quote` and `aa_export`
+* Support `quoting` setting for `zsh_quote` and `aa_export`
 
 * `aa-get` option to store vs. just parse?
 

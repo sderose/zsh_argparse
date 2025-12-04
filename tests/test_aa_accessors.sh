@@ -11,7 +11,7 @@ v=0  # verbose
 source test_funcs.sh
 source ../zerg_setup.sh
 
-# Test general shell variable (sv_) functions.
+# Test general shell variable (zsh_) functions.
 
 
 tHead "Testing zsh_type"
@@ -99,28 +99,28 @@ testOutput "0"  aa_len $VN
 
 ###############################################################################
 #
-tHead "Testing sv_quote"
-testRC FAIL sv_quote -q NOBODY_HOME
-testOutput "'foo'" sv_quote aav_x
-testOutput "134217727" sv_quote aav_y
-testOutput "1.6180338000" sv_quote aav_phi
-testOutput "1 2 3 'd' 'e' 'f' 3.14" sv_quote aav_arr
-testOutput "'a mixture' 1 2" sv_quote aav_asc
+tHead "Testing zsh_quote"
+testRC FAIL zsh_quote -q NOBODY_HOME
+testOutput "'foo'" zsh_quote aav_x
+testOutput "134217727" zsh_quote aav_y
+testOutput "1.6180338000" zsh_quote aav_phi
+testOutput "1 2 3 'd' 'e' 'f' 3.14" zsh_quote aav_arr
+testOutput "'a mixture' 1 2" zsh_quote aav_asc
 
 local -A aav_colors=( [magenta]="a mixture" [red]=1 [green]="2" )
 testRC PASS aa_eq aav_asc aav_colors
 
 
-tHead "Testing sv_tostring"
-testRC FAIL sv_tostring -q NOBODY_HOME
-testOutput "foo" sv_tostring aav_x
-testOutput "134217727" sv_tostring aav_y
-testOutput "1.6180338000" sv_tostring aav_phi
-testOutput "( 1 2 3 d e f 3.14 )" sv_tostring aav_arr
+tHead "Testing zsh_tostring"
+testRC FAIL zsh_tostring -q NOBODY_HOME
+testOutput "foo" zsh_tostring aav_x
+testOutput "134217727" zsh_tostring aav_y
+testOutput "1.6180338000" zsh_tostring aav_phi
+testOutput "( 1 2 3 d e f 3.14 )" zsh_tostring aav_arr
 
 local aa_ascStr=`typeset -p aav_asc | sed 's/^[^=]*=//'`
 #echo "\$aa_ascStr is: $aa_ascStr"
-testOutput "$aa_ascStr" sv_tostring aav_asc
+testOutput "$aa_ascStr" zsh_tostring aav_asc
 
 
 tHead "Testing str_escape"

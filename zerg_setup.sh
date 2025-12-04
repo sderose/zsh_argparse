@@ -291,11 +291,11 @@ EOF
     [[ $the_type == "$1" ]] || return 1
 }
 
-sv_quote() {
+zsh_quote() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: sv_quote varname
+Usage: zsh_quote varname
 Echo the value of the named shell variable, escaped and quoted.
 * undefined variable
     A message is displayed and RC is 1.
@@ -312,7 +312,7 @@ Echo the value of the named shell variable, escaped and quoted.
     Put it in single quotes (unless it's a single token).
     Backslash any internal single quotes and backslashes.
     This uses zsh ${(qq)...}.
-See also: ${(q)name} (and qq, qqq, and qqqq); sv_tostring; aa_export.
+See also: ${(q)name} (and qq, qqq, and qqqq); zsh_tostring; aa_export.
 TODO: Add like Python csv QUOTE_NONNUMERIC, MINIMAL, ALL, NONE?
 EOF
             return ;;
@@ -325,7 +325,7 @@ EOF
     req_argc 1 1 $# || return $ZERR_ARGC
     local typ=`zsh_type $1`
     if [[ $typ == undef ]]; then
-        [ $quiet ] || warn 0 "sv_quote: Variable not defined: '$1'."
+        [ $quiet ] || warn 0 "zsh_quote: Variable not defined: '$1'."
         return $ZERR_UNDEF
     fi
     local val=${(P)1}
@@ -352,14 +352,14 @@ EOF
     fi
 }
 
-sv_tostring() {
+zsh_tostring() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: sv_tostring varname
+Usage: zsh_tostring varname
 Echo the value of the named shell variable, in the form that can be used
     to re-create it via `typeset` or store it as a packed (q.v.).
-See also: sv_quote, typeset -p, is_packed.
+See also: zsh_quote, typeset -p, is_packed.
 EOF
             return ;;
         -q|--quiet) quiet='-q';;
@@ -371,7 +371,7 @@ EOF
     req_argc 1 1 $# || return $ZERR_ARGC
     local typ=`zsh_type $1`
     if [[ $typ == "undef" ]]; then
-        [ $quiet ] || warn 0 "sv_tostring: Variable not defined: '$1'."
+        [ $quiet ] || warn 0 "zsh_tostring: Variable not defined: '$1'."
         return $ZERR_UNDEF
     fi
     local decl=$(typeset -p "$1" 2>/dev/null) || return $ZERR_UNDEF
@@ -400,7 +400,7 @@ Options:
     -f url: Various characters to UTF-8 and %xx encoding
     -- Mark end of options (this is mainly needed if a string to escape
     may start with "-", lest it be taken as an option)
-See also: sv_quote; sv_tostring; sv_export.
+See also: zsh_quote; zsh_tostring; zsh_export.
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;

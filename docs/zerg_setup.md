@@ -20,7 +20,7 @@ See also:  ${(t)name} or ${(tP)name}, which return a hyphen-separated list of
 properties of a given variable. Typical use:
     if [[ `zsh_type path` == "undef" ]]; then...
 
-sv_quote [varname] --
+zsh_quote [varname] --
 echo the value of the named shell variable, escaped and quoted. Quoting
 depends on the type
 
@@ -46,7 +46,7 @@ Backslash any internal single quotes and backslashes.
 This uses zsh ${(qq)...}; zsh has ${(q)name} (and qq, qqq, and qqqq).
 
 
-sv_tostring [varname] -- this is essentially the same as `typeset -p [varname]`.
+zsh_tostring [varname] -- this is essentially the same as `typeset -p [varname]`.
 
 str_escape [-f formatname] string
 Escape the string as needed for the given format (default: html).

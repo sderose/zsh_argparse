@@ -82,7 +82,7 @@ as in Python.
 * Zerg functions are not "owned" by a class or object, so they
 are distinguished by a relevant names prefix, such as "zerg_"
 for argument parser functions, `aa_` for functions that help
-with associative arrays, `sv_` for general shell variable helpers, etc. They can be used apart from zerg.
+with associative arrays, `zsh_` for general shell variable helpers, etc. They can be used apart from zerg.
 For example, you can use `aa_keys name` on any zsh associative
 array, much like `${(k)name}` (and you don't need `(P)` when
 the name is itself in a variable).

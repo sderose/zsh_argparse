@@ -36,7 +36,7 @@ EOF
     if [[ $svt == undef ]]; then
         typeset -A $1
     elif [[ $svt != assoc ]]; then
-        [ $quiet ] || warn 0 "sv_quote: Variable '$1' is not an assoc."
+        [ $quiet ] || warn 0 "zsh_quote: Variable '$1' is not an assoc."
         return $ZERR_UNDEF
     fi
     if [ -z "$2" ]; then
@@ -44,7 +44,7 @@ EOF
     else
         local zerg_class=${${(P)1}[$ZERG_CLASS_KEY]}
         if [ -n "$zerg_class" ] && [ -z "$force" ]; then
-            [ $quiet ] || warn 0 "sv_quote: Variable '$1' already of type '$zerg_class' (consider -f?)."
+            [ $quiet ] || warn 0 "zsh_quote: Variable '$1' already of type '$zerg_class' (consider -f?)."
             return $ZERR_UNDEF
         fi
         aa_set $1 $ZERG_CLASS_KEY "$2"
