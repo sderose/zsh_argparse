@@ -33,7 +33,7 @@ testRC() {
             return 0
         else
             warn 0 "FAIL RC: $*\n    expected RC $expect but got $rc."
-            ((FAILCT+=1))
+            ((+=1))
             return $ZERR_TEST_FAIL
         fi
     elif [[ "$expect" == 'FAIL' ]]; then
@@ -59,6 +59,7 @@ testRC() {
 }
 
 testOutput() {
+    local tmpfile="/tmp/testOutput.txt"
     if [[ $# < 2 ]]; then
         warn 0 "testOutput: Need >=2 arguments (result, command), not $#."
         return 99
@@ -66,8 +67,11 @@ testOutput() {
     local expect="$1"
     shift
     #warn 0 "Running: $*" >&2
-    local gotten=`"$@"`
+    # Backticks or $() would run in a subshell, which would be bad.
+    "$@" >$tmpfile
     local rc=$?
+    local gotten=$(<"$tmpfile")
+    rm -f "$tmpfile"
     if [[ "$gotten" == "$expect" ]]; then
         warn 1 "PASS: $*"
         return 0

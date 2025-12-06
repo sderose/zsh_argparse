@@ -52,6 +52,7 @@ EOF
 }
 
 aa_clear() {
+    local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_clear assoc_name
@@ -59,6 +60,7 @@ Usage: aa_clear assoc_name
     The array itself remains defined but becomes empty.
 EOF
             return ;;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -77,6 +79,7 @@ EOF
 }
 
 aa_copy() {
+    local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_copy source_assoc target_assoc
@@ -84,6 +87,7 @@ Usage: aa_copy source_assoc target_assoc
     Initialize the target assoc if it does not exist already.
 EOF
             return ;;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -105,6 +109,7 @@ EOF
 }
 
 aa_update() {
+    local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_update target_assoc source_assoc
@@ -112,6 +117,7 @@ Usage: aa_update target_assoc source_assoc
     Existing keys in target_assoc will be overwritten.
 EOF
             return ;;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -128,31 +134,6 @@ EOF
         #value=$(aa_get "$source_assoc" "$key")
         aa_set "$target_assoc" "$key" "${${(P)source_assoc}[$key]}"
     done
-}
-
-aa_set_default() {
-    local quiet
-    while [[ "$1" == -* ]]; do case "$1" in
-        (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage: aa_setdefault assoc_name key default_value
-    Set key to default_value if key does not already exist in the assoc.
-Returns: the existing value or the default value that was set.
-EOF
-            return ;;
-        -q) quiet="-q" ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
-      esac
-      shift
-    done
-
-    req_argc 3 3 $# || return $ZERR_ARGC
-    req_zsh_type $quiet assoc "$1" || return $ZERR_ZSH_TYPE
-    if aa_has "$1" "$2"; then
-        aa_get $quiet "$1" "$2"
-    else
-        aa_set $quiet "$1" "$2" "$3" || return $?
-        echo "$3"
-    fi
 }
 
 
@@ -212,7 +193,7 @@ EOF
 }
 
 aa_has() {
-    local quiet=""
+    local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_has assoc_name key
@@ -247,6 +228,9 @@ aa_set() {
 Usage: aa_set assoc_name key value
     Set a key-value pair in a named associative array.
     This is equivalent to: assoc_name[key]=value
+Note: Do not call this via `aa_set_default...` or $(aa_set_default...}.
+    Both of those constructs run the command in a subshell, making it
+    impossible to change the original shell's assoc.
 EOF
             return ;;
         -q) quiet="-q" ;;
@@ -261,12 +245,50 @@ EOF
 
     # The quoting here is very touchy. Be sure to check keys and values
     # containing nothing, quotes, $, and space.
-    local qvalue=${(qq)value}
+    local qkey=${(q)key} qvalue=${(qq)value}
     eval "${assoc_name}[\$key]=$qvalue"
     local rc=$?
-    if [ $? != 0 ]; then
+    if ! aa_has $assoc_name "$key"; then
+        warn 0 "Eval ($rc) failed to set $1 item $2 to $3."
+        #echo "in aa_set: 1: $1, 2: $2, key: $key, qkey: $qkey, value: $value, qvalue: $qvalue." >&2
+        #echo "After eval (rc $?):" >&2
+        #typeset -p $assoc_name >&2
+    fi
+
+    # TODO Echoing $assoc_name[$key] fails on math recursion limit
+    if [ $rc != 0 ]; then
         warn 0 "aa_set $1 $2 $3 failed (rc $rc) on eval of $evalString"
         return 50
+    fi
+}
+
+aa_set_default() {
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: aa_setdefault assoc_name key default_value
+    Set key to default_value if key does not already exist in the assoc.
+Note: Do not call this via `aa_set_default...` or $(aa_set_default...}.
+    Both of those constructs run the command in a subshell, making it
+    impossible to change the original shell's assoc.
+EOF
+            return ;;
+        -q) quiet="-q" ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    #warn "in aa_set_default: 1 '$1' 2 '$2' 3 '$3'."
+    req_argc 3 3 $# || return $ZERR_ARGC
+    req_zsh_type $quiet assoc "$1" || return $ZERR_ZSH_TYPE
+    aa_has $quiet "$1" "$2" && return 0
+    #warn "Setting item '$2' from default_value '$3'."
+    aa_set $quiet "$1" "$2" "$3"
+    local rc=$?
+    if ! [ $rc ]; then
+        warn "aa_set failed (rc $rc), assoc '$1', key '$2', value '$3'."
+        return $rc
     fi
 }
 
@@ -301,13 +323,16 @@ EOF
     elif [[ -n "$use_default" ]]; then
         echo "$default"
     else
-        [ "$quiet" ] || warn 0 "Key '$key' not found in $assoc_name."
+        if ! [ "$quiet" ]; then
+            warn 0 "Key '$key' not found in $assoc_name."
+            typeset -p $assoc_name >&2
+        fi
         return $ZERR_NO_KEY
     fi
 }
 
 aa_unset() {
-    local quiet=""
+    local quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_unset assoc_name key
@@ -338,7 +363,7 @@ alias aa_del=aa_unset
 # Extractors: keys, values, export
 #
 aa_keys() {
-    local sort isort nsort reverse
+    local sort isort nsort reverse quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_keys assoc_name [target_assoc]
@@ -355,6 +380,7 @@ EOF
             --isort) isort=1 ;;
             --nsort) nsort=1 ;;
             --reverse) reverse=1 ;;
+            -q|--quiet) quiet='-q' ;;
             *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
         shift
@@ -396,7 +422,7 @@ EOF
 }
 
 aa_values() {
-    local sort
+    local sort quiet
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_values assoc_name [target_assoc]
@@ -407,6 +433,7 @@ Option: --sort.
 Note: Values containing spaces will be properly quoted.
 EOF
                 return ;;
+            -q|--quiet) quiet='-q' ;;
             --sort) sort=1 ;;
             *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
         esac
@@ -719,10 +746,17 @@ EOF
     req_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
     local assoc_name="$1" partial_key="$2"
 
-    local foundKey=`aa_find_key $quiet $ic "$assoc_name" "$partial_key"`
-    local rc=$?
+    local foundKey rc
+    if [ $ic ]; then
+        foundKey=`aa_find_key -q -i "$assoc_name" "$partial_key"`
+        rc=$?
+    else
+        foundKey=`aa_find_key -q "$assoc_name" "$partial_key"`
+        rc=$?
+    fi
+    #warn 0 "DEBUG: foundKey='$foundKey', rc=$rc, ic='$ic', partial_key='$partial_key'"
     case $rc in
-        0) echo `aa_get "$assoc_name" "$foundKey"`
+        0) aa_get "$assoc_name" "$foundKey"
             return 0 ;;
         1) [ $use_default ] && echo "$default_value" && return 0
             [ $quiet ] || warn 0 "Key '$partial_key' not found in $assoc_name";
