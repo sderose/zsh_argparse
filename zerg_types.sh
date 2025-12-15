@@ -95,10 +95,12 @@ is_of_zerg_class() {
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: is_of_zerg_class classname varname
     Check whether the named shell variable is of the given zerg class.
-    That is, it must be an associative array, and contains an item with
+    That is, it must be an associative array, and contain an item with
     whose name matches $ZERG_CLASS_KEY, and whose value is classname.
+    if you pass "*" as classname, any class will do.
 Examples:
     is_of_zerg_class ZERG_PARSER myArgParser || return $?
+    is_of_zerg_class "*" myArgParser || echo "Not a zerg object."
 See also: zerg_get_class.
 EOF
             return ;;
@@ -109,6 +111,7 @@ EOF
     done
 
     local the_class=`zerg_get_class $quiet "$2"` || return $?
+    [[ $the_class == "*" ]] && return 0
     [[ $the_class == "$1" ]] || return $ZERR_CLASS_CHECK
 }
 
@@ -173,9 +176,25 @@ is_uidents() {
 }
 
 is_argname() {
-    # Test for legit option/argument name form: -c or --xx-yy...
-    # The arg is typically coming in with leading hyphens, so we don't do -q.
-    # TODO Switch to allow -q and also --?
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: is_argname [--] string
+    Test if the string is a legit option name, as would be specified in
+    an actual command line (with leading and internal hyphens intact).
+    Single-character options should have one leading hyphens, others two.
+Note: Because the arg has leading hyphens, if your string to test might
+    be -h or -q or --quiet, you should put "--" before.
+EOF
+            return ;;
+        -q|--quiet) quiet='-q' ;;
+        --) shift; break ;;
+        *) warn 0 "Unrecognized option '$1'.";
+            return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
     [ $# -eq 1 ] || return ZERR_ARGC
     if [[ -z "$1" ]] || ! [[ "$1" =~ ^($_argname_re)$ ]]; then
         # [ $quiet ] || warn 0 "'$1' is not a valid --option-name."

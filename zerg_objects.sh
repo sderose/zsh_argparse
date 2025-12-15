@@ -51,6 +51,8 @@ EOF
     fi
 }
 
+### See also is_of_zerg_class in ../zerg_types.sh.
+
 zerg_get_class() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in

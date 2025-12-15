@@ -83,7 +83,7 @@ This can check any integer range, for example array bounds:
     req_argc 1 $#theArray $index...
 EOF
             return ;;
-        -q|--quiet) quiet='-q';;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -132,7 +132,7 @@ Undeclared plain assignment can only create scalars or arrays:
               X='some text'
               X=99 [this is still a scalar string, not an integer]
 
-See also: is_zsh_type, req_zerg_type, req_zerg_class.
+See also: is_zsh_type, req_zerg_type, is_of_zerg_class.
 
 Note: zsh types should not be confused with zerg types, which
 interpret strings (such as option values). For example, a zerg "int"
@@ -142,6 +142,7 @@ To test zerg types, see `is_of_zerg_type` or `is_` plus a type name.
 EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
+        --) shift; break ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -149,7 +150,7 @@ EOF
 
 
     while (($# > 1)); do
-        local typ=`zsh_type $2`
+        local typ=`zsh_type -- $2`
         if [[ $typ != "$1" ]]; then
             [ $quiet ] || warn 0 "Variable '$2' is $typ, not $1."
             return $ZERR_ZSH_TYPE
@@ -175,12 +176,12 @@ Options:
     -q|--quiet: Suppress messages.
     -i|--ignore-case: Disregard case distinctions.
     -- Mark end of options.
-See also: is_of_zerg_type, req_zerg_class, req_zsh_type.
+See also: is_of_zerg_type, is_of_zerg_class, req_zsh_type.
 EOF
             return ;;
-        -q|--quiet) quiet='-q';;
+        -q|--quiet) quiet='-q' ;;
         -i|--ignore-case) ic=1 ;;
-        --) break ;;
+        --) shift; break ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -190,39 +191,6 @@ EOF
         if ! is_of_zerg_type $1 $2; then
             [ $quiet ] || warn 0 "String '$2' does not match type $1."
             return $ZERR_ZTYPE_VALUE
-        fi
-        shift 2
-    done
-}
-
-req_zerg_class() {
-    local quiet ic
-    while [[ "$1" == -* ]]; do case "$1" in
-        (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage:
-    req_zerg_class [-q] classname varname
-Check whether the named variable (not a value) is of the
-named zerg class (see \$ZERG_CLASS_KEY). Return 0 iff so;
-otherwise print a message and return non-zero rc.
-Options:
-    -q|--quiet: Suppress messages.
-See also: is_of_zerg_class.
-EOF
-            return ;;
-        -q|--quiet) quiet='-q';;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
-      esac
-      shift
-    done
-
-    req_argc 2 2 $# || return $ZERR_ARGC
-    req_zerg_type ident "$1" || return $ZERR_ARGC
-    req_zsh_type assoc "$2" || return $ZERR_ARGC
-
-    while (($# > 1)); do
-        if ! [[ `zerg_get_class "$2"` == "$1" ]]; then
-            [ $quiet ] || warn 0 "Assoc '$2' is not of zerg class '$1'."
-            return $ZERR_ZSH_TYPE
         fi
         shift 2
     done
@@ -251,7 +219,8 @@ Notes:
 See also: is_of_zerg_type, zerg_get_class, typeset -p, ${(t)x}.
 EOF
             return ;;
-        -q|--quiet) quiet='-q';;
+        -q|--quiet) quiet='-q' ;;
+        --) shift; break ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -281,7 +250,7 @@ Examples:
 See also: is_of_zerg_type.
 EOF
             return ;;
-        -q|--quiet) quiet='-q';;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -316,7 +285,7 @@ See also: ${(q)name} (and qq, qqq, and qqqq); zsh_tostring; aa_export.
 TODO: Add like Python csv QUOTE_NONNUMERIC, MINIMAL, ALL, NONE?
 EOF
             return ;;
-        -q|--quiet) quiet='-q';;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -362,7 +331,7 @@ Echo the value of the named shell variable, in the form that can be used
 See also: zsh_quote, typeset -p, is_packed.
 EOF
             return ;;
-        -q|--quiet) quiet='-q';;
+        -q|--quiet) quiet='-q' ;;
         *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -463,17 +432,31 @@ EOF
 
 
 ###############################################################################
+# Dealing with different forms of option names. Mainly:
+#   * 'opt':  -q --quiet --silent-running
+#   * 'var':  q    quiet   silent_running
+#   * 'def':  PARSERNAME__q  PNAME__quiet  MYPARSER__silent_running
 #
 zerg_opt_to_var() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<'EOF'
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage zerg_opt_to_var [string]
-    Remove leading hyphens, and turn any others to underscores.
+    Turn an option name as specified in a command, into a variable name.
+    That is, remove leading hyphens and turn any others to underscores.
     Then make sure the result is a legit variable name (is_ident).
+    The variable does not have to actuallly exist.
+Note: It is ok if the string is already in var form.
 See also: is_argname, is_varname.
 EOF
-        return
-    fi
+            return ;;
+        -q|--quiet) quiet='-q' ;;
+        --) shift; break ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
     local x=${${1#-}#-}
     x="$x:gs/-/_/"
     if ! is_ident "$x"; then
@@ -484,25 +467,103 @@ EOF
 }
 
 zerg_var_to_opt() {
-    if [[ "$1" == "-h" ]]; then
-        cat <<'EOF'
-Usage zerg_var_to_opt [string]
-    Add leading hyphens, and turn any underscoresothers to .
-    Then make sure the result is a legit option name (is_argname).
+    local quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage zerg_var_to_opt [--] [string]
+    Turn a variable name into the corresponding option name.
+    That is, turn any underscoresothers to hyphens, than add a
+    single hyphen for a single-character name, otherwise 2 hyphens.
 See also: is_argname, is_varname.
 EOF
-        return
-    fi
-    local x="--"${1:gs/_/-/}
-    if ! is_argname "$x"; then
+            return ;;
+        -q|--quiet) quiet='-q' ;;
+        --) shift; break ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    local x="-"${1:gs/_/-/}
+    [[ $#1 -eq 1 ]] || x="-$x"
+    if ! is_argname -- "$x"; then
         warn 0 "Invalid argname '$x' (original: '$1')."
         return $ZERR_BAD_NAME
     fi
     echo $x
 }
 
+get_argdef_name() {
+    local quiet must_exist
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage get_argdef_name [--] parsername refname
+    Given a parser name and argument refname, return the name
+    of the associative array in which the argument def should be stored.
+    The parser name must be that of the parser that *defines* the
+    option (for example, not one that merely re-uses it).
+    The name is the parsername, 2 underscores, and the option's var name.
+Options:
+    -e|--exist: The calculated value must name an associative array that
+        is marked as an instance of zerg class ZERG_ARG_DEF. Otherwise
+        a message is issued (unless -q) and rc $ZERR_CLASS_CHECK is returned.
+    -q|--quiet: Suppress messages.
+    --: Stop processing options.
+See also: is_argname, is_varname, zerg_var_to_opt, zerg_opt_to_var.
+EOF
+            return ;;
+        -q|--quiet) quiet='-q' ;;
+        -e|exist) must_exist=1 ;;
+        --) shift; break ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    is_of_zerg_class ZERG_PARSER $1 || return $?
+    local varname=`zerg_opt_to_var -- $2` || return $?
+    local defname=$1"__"$varname
+    if [ $must_exist ] && ! is_of_zerg_class ZERG_ARG_DEF $defname; then
+        [ $quiet ] || warn "Variable '$defname' is not of class ZERG_ARG_DEF."
+        return $ZERR_CLASS_CHECK
+    fi
+    echo $defname
+}
+
+argdef_split() {
+    local parser quiet refname
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage split_argdef [--] argdefname
+    Given an argument definition name, like MYPARSER__quiet,
+    separate the parser name and option name. Echo them with a space.
+Options:
+    -p: Only echo the parser name.
+    -r: Only echo the argument reference name.
+EOF
+            return ;;
+        -p|--parser) parser=1 ;;
+        -q|--quiet) quiet='-q' ;;
+        -r|--refname) refname=1 ;;
+        --) shift; break ;;
+        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+      esac
+      shift
+    done
+
+    [[ "$1" =~ __ ]] || return $?
+    if [[ $parser ]]; then
+        echo ${1/__*/}
+    elif [[ $refname ]]; then
+        echo ${1/*__/}
+    else
+        echo ${1:s/__/ }
+    fi
+}
+
 
 ###############################################################################
+# Character set handy stuff
 #
 zerg_ord() {
     if [[ $1 == "-x" ]]; then
@@ -521,9 +582,9 @@ zerg_chr() {
 #
 export -h ZERG_SETUP=1
 
-source 'aa_accessors.sh' || echo "aa_accessors.sh failed, code $?"
-source 'zerg_types.sh' || echo "zerg_types.sh failed, code $?"
-source 'zerg_objects.sh' || echo "zerg_objects.sh failed, code $?"
-source 'zerg_new.sh' || echo "zerg_new.sh failed, code $?"
-source 'zerg_add.sh' || echo "zerg_add.sh failed, code $?"
-source 'zerg_parse.sh' || echo "zerg_parse.sh failed, code $?"
+source 'aa_accessors.sh' || warn "aa_accessors.sh failed, code $?"
+source 'zerg_types.sh' || warn "zerg_types.sh failed, code $?"
+source 'zerg_objects.sh' || warn "zerg_objects.sh failed, code $?"
+source 'zerg_new.sh' || warn "zerg_new.sh failed, code $?"
+source 'zerg_add.sh' || warn "zerg_add.sh failed, code $?"
+source 'zerg_parse.sh' || warn "zerg_parse.sh failed, code $?"

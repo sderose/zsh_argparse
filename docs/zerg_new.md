@@ -100,9 +100,11 @@ Show shorter help, mainly list of options
 * --var-style [how]
 How to store results: `separate` (default) or `assoc`.
 With `separate`, they are stored as global variables named the same as the
-reference names. With `assoc`, they're put in a global associative array
-named `ZERGS`, keyed by those names. They are global because they have to
-be visible to the shell function that called zerg functions.
+reference names. With `assoc`, they're put in an associative array
+named by the parser name, two underscores, and "results", keyed by those names.
+Thus, you can't have an option with refname "results" if you're using
+`--var-style assoc` for that parser (though "results" could be a non-refname
+(aka alias).
 
 
 ==Storage==

@@ -5,9 +5,9 @@ if [[ $1 == "-v" ]]; then
     ZERG_V=0; shift
 fi
 
-local TEST_TYPES=""
+local TEST_TYPES="1"
 local TEST_ACTIONS="1"
-local TEST_TOGGLE=1
+local TEST_TOGGLE="1"
 
 source test_funcs.sh
 source ../zerg_setup.sh
@@ -64,7 +64,7 @@ zerg_add -q PARSER "notgood" --action store_true --help "Bad name, add should fa
 tHead "Testing parse"
 zerg_parse PARSER --verbose --silent hello.txt file2.txt
 
-echo "Got: quiet $quiet, verbose $verbose, maxChar $maxChar."
+warn "Got: quiet $quiet, verbose $verbose, maxChar $maxChar."
 typeset -p PARSER__results
 
 tHead "Testing zerg_to_argparse"
@@ -97,7 +97,7 @@ if [ $TEST_TYPES ]; then
         warn 1 "*** Adding arg --type '$cur' and --$cur_opt."
         zerg_add PARSER "--${cur_opt}-o1" --type $cur
         zerg_add PARSER "--${cur_opt}-o2" --$cur_opt --dest result_${cur}_o1
-        [ $ZERG_V ] && typeset -p PARSER__${cur}-o1
+        [ $ZERG_V ] && typeset -p PARSER__${cur}_o1
         is_zergtypename $cur || warn 0 "Type didn't pass: '$cur'."
         #is_of_zerg_type -q $cur 99
         #(( $? > 1 )) && warn 0 "is_of_zerg_type problem for type '$cur'."
@@ -126,12 +126,14 @@ fi
 ### Test re-use
 
 tHead "Testing parse again"
-zerg_new PAR2
+zerg_new PAR2 --var-style assoc
 zerg_add PAR2 "--verbose -v" --count
-zerg_add PAR2 "--category" --choices "aardvark basilisk catoblepus dog" \
+zerg_add PAR2 "--category" --type str --choices "aardvark basilisk catoblepus dog" \
     --help "List stuff in the specified category."
 zerg_add PAR2 "--uchar" --hexint --default 0x2002
 
-zerg_parse -v PAR2 --quiet -v -v -v --category basilisk --uchar 0xBEEf hello.txt
+aa_export PAR2
+
+zerg_parse PAR2 -v -v -v --category basilisk --uchar 0xBEEf hello.txt
 
 aa_export PAR2__results

@@ -98,7 +98,7 @@ EOF
     local parser_name="$1"
     shift
 
-    echo "Creating parser '$parser_name'"
+    warn "Creating parser '$parser_name'"
     _zerg_parser_init $parser_name || return $?
 
     # Parse options
@@ -175,11 +175,11 @@ EOF
       shift
     done
 
-    req_zerg_class ZERG_PARSER "$1" || return $?
+    is_of_zerg_class ZERG_PARSER "$1" || return $?
     local def_names=`aa_get "$1" all_def_names`
     for def_name in ${(z)def_names}; do
         #warn 0 "Deleting '$def_name'."
-        #req_zerg_class ZERG_ARG_DEF "$name" &&
+        #is_of_zerg_class ZERG_ARG_DEF "$name" &&
         unset $def_name
     done
     unset "$1"
@@ -199,7 +199,7 @@ EOF
       shift
     done
 
-    req_zerg_class ZERG_PARSER "$1" || return $?
+    is_of_zerg_class ZERG_PARSER "$1" || return $?
     aa_export -f view "$1"
     local args=$(aa_get "$1" "$art_names_list")
     for arg in ${(zO)args}; do
@@ -221,7 +221,7 @@ EOF
       shift
     done
 
-    req_zerg_class ZERG_PARSER "$1" || return $?
+    is_of_zerg_class ZERG_PARSER "$1" || return $?
     local parser_name="$1"
 
     local -A notpython=(

@@ -140,7 +140,7 @@ EOF
 ###############################################################################
 # Predicates: len, eq, has (=contains)
 #
-aa_len() {  # TODO rename sv?
+aa_len() {
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_len varname
@@ -255,7 +255,7 @@ EOF
         #typeset -p $assoc_name >&2
     fi
 
-    # TODO Echoing $assoc_name[$key] fails on math recursion limit
+    # Echoing $assoc_name[$key] would fail on math recursion limit
     if [ $rc != 0 ]; then
         warn 0 "aa_set $1 $2 $3 failed (rc $rc) on eval of $evalString"
         return 50
