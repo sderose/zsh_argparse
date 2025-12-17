@@ -47,13 +47,21 @@ warn() {
         level=$1; shift
     fi
     [[ $ZERG_V -lt $level ]] && return
+    local msg="$*"
+    if [[ $msg =~ "===="* ]]; then
+        echo ""
+        echo "================================================================"
+        echo $msg[5,-1]
+        return
+    fi
     if [ -z $quiet ]; then
         for (( i=1; i<=$ZERG_STACK_LEVELS; i++ )); do
             [[ $functrace[$i] =~ ^(zsh:|$) ]] && break;
             ftrace+=" $functrace[$i] \<"
         done
+        ftrace[-1]=":"
     fi
-    print "$ftrace: $*" >&2
+    print "$ftrace $msg" >&2
 }
 
 tHead() {
@@ -84,17 +92,17 @@ This can check any integer range, for example array bounds:
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     if [[ $# -ne 3 ]]; then
-        [ $quiet ] || warn 0 "req_argc expected 3 args, but got $#."
+        [ $quiet ] || warn "req_argc expected 3 args, but got $#."
         return $ZERR_ARGC
     fi
     if [[ $3 -lt "$1" ]] || [[ $3 -gt "$2" ]]; then
-        [ $quiet ] || warn 0 "Expected from $1 to $2 arg(s), but got $3."
+        [ $quiet ] || warn "Expected from $1 to $2 arg(s), but got $3."
         return $ZERR_ARGC
     fi
 }
@@ -143,7 +151,7 @@ EOF
             return ;;
         -q|--quiet) quiet="-q" ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -152,7 +160,7 @@ EOF
     while (($# > 1)); do
         local typ=`zsh_type -- $2`
         if [[ $typ != "$1" ]]; then
-            [ $quiet ] || warn 0 "Variable '$2' is $typ, not $1."
+            [ $quiet ] || warn "Variable '$2' is $typ, not $1."
             return $ZERR_ZSH_TYPE
         fi
         shift 2
@@ -182,14 +190,14 @@ EOF
         -q|--quiet) quiet='-q' ;;
         -i|--ignore-case) ic=1 ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
     while (($# > 1)); do
         if ! is_of_zerg_type $1 $2; then
-            [ $quiet ] || warn 0 "String '$2' does not match type $1."
+            [ $quiet ] || warn "String '$2' does not match type $1."
             return $ZERR_ZTYPE_VALUE
         fi
         shift 2
@@ -221,12 +229,12 @@ EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
 
-    #tMSg 1 "*** zsh_type: '${(tP)1}' for '$1'."
+    #warn 1 "*** zsh_type: '${(tP)1}' for '$1'."
     case "${(tP)1}" in
         "")           echo "undef" ;;
         scalar*)      echo "scalar" ;;
@@ -234,7 +242,7 @@ EOF
         float*)       echo "float" ;;
         array*)       echo "array" ;;
         association*) echo "assoc" ;;
-        *) [ $quiet ] || warn 0 "Error, (tP) said '${(tP)1}'.";
+        *) [ $quiet ] || warn "Error, (tP) said '${(tP)1}'.";
             return 99 ;;
     esac
 }
@@ -251,7 +259,7 @@ See also: is_of_zerg_type.
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -286,7 +294,7 @@ TODO: Add like Python csv QUOTE_NONNUMERIC, MINIMAL, ALL, NONE?
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -294,7 +302,7 @@ EOF
     req_argc 1 1 $# || return $ZERR_ARGC
     local typ=`zsh_type $1`
     if [[ $typ == undef ]]; then
-        [ $quiet ] || warn 0 "zsh_quote: Variable not defined: '$1'."
+        [ $quiet ] || warn "zsh_quote: Variable not defined: '$1'."
         return $ZERR_UNDEF
     fi
     local val=${(P)1}
@@ -332,7 +340,7 @@ See also: zsh_quote, typeset -p, is_packed.
 EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -340,7 +348,7 @@ EOF
     req_argc 1 1 $# || return $ZERR_ARGC
     local typ=`zsh_type $1`
     if [[ $typ == "undef" ]]; then
-        [ $quiet ] || warn 0 "zsh_tostring: Variable not defined: '$1'."
+        [ $quiet ] || warn "zsh_tostring: Variable not defined: '$1'."
         return $ZERR_UNDEF
     fi
     local decl=$(typeset -p "$1" 2>/dev/null) || return $ZERR_UNDEF
@@ -375,7 +383,7 @@ EOF
         -q|--quiet) quiet="-q" ;;
         -f|--format) shift; format=$1 ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1' (do you need to add '--'?)."
+        *) warn "Unrecognized option '$1' (do you need to add '--'?)."
             return $ZERR_BAD_OPTION ;;
       esac
       shift
@@ -425,7 +433,7 @@ EOF
         done
         echo "$encoded"
     else
-        [ $quiet ] || warn 0 "str_escape: Unknown format '$format'"
+        [ $quiet ] || warn "str_escape: Unknown format '$format'"
         return $ZERR_ENUM
     fi
 }
@@ -452,7 +460,7 @@ EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -460,7 +468,7 @@ EOF
     local x=${${1#-}#-}
     x="$x:gs/-/_/"
     if ! is_ident "$x"; then
-        warn 0 "Invalid identifier '$x' (original: '$1')."
+        warn "Invalid identifier '$x' (original: '$1')."
         return $ZERR_BAD_NAME
     fi
     echo $x
@@ -479,7 +487,7 @@ EOF
             return ;;
         -q|--quiet) quiet='-q' ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -487,7 +495,7 @@ EOF
     local x="-"${1:gs/_/-/}
     [[ $#1 -eq 1 ]] || x="-$x"
     if ! is_argname -- "$x"; then
-        warn 0 "Invalid argname '$x' (original: '$1')."
+        warn "Invalid argname '$x' (original: '$1')."
         return $ZERR_BAD_NAME
     fi
     echo $x
@@ -515,7 +523,7 @@ EOF
         -q|--quiet) quiet='-q' ;;
         -e|exist) must_exist=1 ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done
@@ -546,7 +554,7 @@ EOF
         -q|--quiet) quiet='-q' ;;
         -r|--refname) refname=1 ;;
         --) shift; break ;;
-        *) warn 0 "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
+        *) warn "Unrecognized option '$1'."; return $ZERR_BAD_OPTION ;;
       esac
       shift
     done

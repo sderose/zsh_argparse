@@ -115,7 +115,8 @@ unless `--loose` is set, in which case also:
 ===Floating-point types===
 
 * `float` -- A floating-point decimal value, allowing exponential notation.
-Specials such as NaN, Inf, etc. are not supported.
+IEEE special values 'NaN', 'Inf', and '-Inf' are accepted (they are
+case insensitive).
 
 * `prob` -- A `float` in the range from 0.0 to 1.0 (inclusive), as for a probability.
 
@@ -125,33 +126,37 @@ Specials such as NaN, Inf, etc. are not supported.
 The trailing `i` can be any of [iIjJ]. A float with no imaginary part is
 also accepted.
 
-* `tensor` -- Tensor  expects a string consisting of one or more space
-separated floats. The floats may also be grouped by parentheses, which
-may or may not also be whitespace separated.
-Parentheses are checked for balance but not for uniform cardinalities,
-unless the `--shape` option is specified for `is_tensor` (see below).
-For example:
+* `tensor` -- Tensor expects a string consisting of one or more floats,
+separated by spaces and/or parentheses. If parentheses are present
+they may or may not also be whitespace separated, but they must balance.
+Uniform cardinalities are only
+checked if the `is_tensor` `--shape` option is specified.
+For example, without `--shape` these all pass,
+but with `---shape "4 4"` the first one fails:
 
-( ( 1E-10 2 3 ) ( 4 5 6 ) ( 7 -8 9 ) )
+    ( (1 2 3 4) (5) (6 7) )
+    ( ( 1E-10 2 3 4) ( 5 6 7 -8 ) (9 10 11 12) )
+    ( ( 0.110001 0.1234567891011 0.235711131719 0.412454033 )
+      ( 0.57721 0.6180338 0.91596 1.839 )
+      ( 1.3247 1.20205 1.6180338 2.502 )
+      ( 2.685 2.71828 3.14159 4.669 6.28318) )
 
-or
+The outer parentheses may not be omitted. For example, "(1 2) (3 4)" does
+not satisfy shaped "2 2".
 
-( ( 0.110001 0.1234567891011 0.235711131719 0.412454033 )
-  ( 0.57721 0.6180338 0.91596 1.839 )
-  ( 1.3247 1.20205 1.6180338 2.502 )
-  ( 2.685 2.71828 3.14159 4.669 6.28318) )
-
-If specified, the experimental `--shape` option must have a value
+If specified, `--shape` must have a value
 consisting of one or more space separated
-items, each of which must be a positive integer or "*". `is_tensor`
-counts the number of items at each () nesting level, and reports if any does not
-match the declared size (except, of course, for sizes of "*").
+items, each of which must be a positive integer or "*" to indicate any
+size is acceptable for that dimension.
+
+There is presently no provision for non-float tensor items (except the
+usual Nan, Inf, and -Inf), or for bases other than 10.
 
 
 ===String types===
 
 "string" very often is used as a catch-all for other types, leaving
-constraints aside. In zsh, most variables are technically strings even when
+constraints aside. In zsh most variables are technically strings even when
 more accurate types are available -- it's slightly easier to type `local n=1`
 even when `local -i n=1` would be slightly safer and more precise.
 There are many cases like variable names, dates, language codes, and
@@ -195,6 +200,9 @@ In zerg, actual argument definitions are stored in assocs named by
 the parser that created them, 2 underscores, and the argument's reference name
 as transformed via `zerg_opt_to_var`. See also `zerg_var_to_opt`,
 `zerg_new`, and `zerg_add` for more details.
+
+* `builtin` -- a command built into zsh, such as `cd`. This does not include
+zsh reserved words (for which see `reserved`).
 
 * `cmdname` -- the name of a currently-available command. This includes
 executables along PATH, aliases, builtins, and shell functions.

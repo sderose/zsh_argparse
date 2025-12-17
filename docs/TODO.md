@@ -107,3 +107,5 @@ like (-h|-he|-hel|-help)....
 * Add `--format` support? Integrate wth typeset
 
 * Should aa_get offer choice of q/qq/qqq/qqqq and 'quoting'?
+
+* Check whether Linux uses en_GB.ISO8859-1 or en_GB.ISO-8859-1.
