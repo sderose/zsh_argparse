@@ -1,8 +1,9 @@
 #!/bin/zsh
 #
-if [ -z "$zerg_types" ]; then
-    source zerg_setup.sh || warn "Could not source zerg_setup.sh."
+if ! [ -v ZERG_SETUP ]; then
+    source ../zerg.plugin.zsh
 fi
+source test_funcs.zsh
 
 local -a int=( 0 1 99 -65537 )
 local -a hexint=( 0x0 0X9999 0XdeadBEEF )
@@ -111,7 +112,7 @@ local -a non_locale=( "klingon" "   " "•" )
 #local -a non_format=( )
 
 local -a non_time=( "34:26:01" "23:01:01W" "-01:02" ^^^9 @#! • )
-local -a non_date=( "197-12-12" "2000-14" "2000-00" "2000-08-32" ^^^9 @#! • )
+local -a non_date=( "^^^9" "197-12-12" "2000-14" "2000-00" "2000-08-32" "@#!" "•" )
 local -a non_datetime=( "2000-11-01W16:04:01" ^^^9 @#! • )
 
 local -a non_duration=( "P3Q22D" ^^^9 @#! • )
@@ -151,7 +152,7 @@ for type_name in ${(ko)zerg_types}; do
         warn 1 "    Negative $type_name  test value '$value'."
         numtests+=1
         if [[  $type_name == argname ]]; then
-            is_argname -- "$value" || continue
+            is_argname -q -- "$value" || continue
         else
             is_$type_name -q "$value" || continue
         fi
@@ -161,4 +162,4 @@ for type_name in ${(ko)zerg_types}; do
 
 # path
 
-tHead "Positive tests: $numtypes types, $numtests tests."
+warn "====Positive tests: $numtypes types, $numtests tests."

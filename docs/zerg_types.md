@@ -116,7 +116,7 @@ unless `--loose` is set, in which case also:
 
 * `float` -- A floating-point decimal value, allowing exponential notation.
 IEEE special values 'NaN', 'Inf', and '-Inf' are accepted (they are
-case insensitive).
+case insensitive), though perhaps this should be optional.
 
 * `prob` -- A `float` in the range from 0.0 to 1.0 (inclusive), as for a probability.
 
@@ -126,27 +126,26 @@ case insensitive).
 The trailing `i` can be any of [iIjJ]. A float with no imaginary part is
 also accepted.
 
-* `tensor` -- Tensor expects a string consisting of one or more floats,
+* `tensor` -- A string consisting of one or more floats,
 separated by spaces and/or parentheses. If parentheses are present
-they may or may not also be whitespace separated, but they must balance.
-Uniform cardinalities are only
-checked if the `is_tensor` `--shape` option is specified.
-For example, without `--shape` these all pass,
+they may or may not also be space separated, but they must balance.
+Uniform cardinalities are only checked if the `is_tensor` `--shape` option
+is specified. For example, without `--shape` these all pass,
 but with `---shape "4 4"` the first one fails:
 
     ( (1 2 3 4) (5) (6 7) )
-    ( ( 1E-10 2 3 4) ( 5 6 7 -8 ) (9 10 11 12) )
+    ( ( 1E-10 2 3 4) ( 5 6 7 -8 ) (9 10 11 12) (13 14 15 +16.0) )
     ( ( 0.110001 0.1234567891011 0.235711131719 0.412454033 )
       ( 0.57721 0.6180338 0.91596 1.839 )
       ( 1.3247 1.20205 1.6180338 2.502 )
       ( 2.685 2.71828 3.14159 4.669 6.28318) )
 
 The outer parentheses may not be omitted. For example, "(1 2) (3 4)" does
-not satisfy shaped "2 2".
+not satisfy `--shape "2 2"`.
 
 If specified, `--shape` must have a value
 consisting of one or more space separated
-items, each of which must be a positive integer or "*" to indicate any
+items, each of which must be a positive integer, or "*" to indicate any
 size is acceptable for that dimension.
 
 There is presently no provision for non-float tensor items (except the
@@ -162,19 +161,25 @@ even when `local -i n=1` would be slightly safer and more precise.
 There are many cases like variable names, dates, language codes, and
 countless "enums" that are highly constrained, not merely generic "strings".
 zerg provides several subtypes of string, and the zerg argument parser
-can use these, and handle case, pattern-matching, and so on.
+can use them as argument types.
 
 * `str` -- any string.
 
-* `char` -- a single character. Unicode characters beyond ASCII count correctly
-as single characters, and combining characters do not count extra. For example,
-LATIN SMALL LETTER E WITH ACUTE (U+e9) counts as a single character,
-and so does the combination of LATIN SMALL LETTER E (U+65)
-and COMBINING ACUTE ACCENT (U+301). The latter is accomplished via `wc -m`.
+* `char` -- a single character (or more technically, a single
+Unicode code point). Unicode characters beyond ASCII take more than
+one byte to store, but still constitute one code point.
+Combining characters such as separate diacritics do count as separate
+code points unless you specify `is_char --combining`.
+The test in that case is accomplished via `wc -m`.
 
-* `ident` -- a zsh identifier (not necessarily already in use; see `varname`).
+* `ident` -- an identifier (not necessarily already in use; see `varname`).
 Identifiers must start with an ASCII letter or underscore,
 and may continue with more ASCII letters, digits, and/or underscores.
+
+Note: Integers are not considered identifiers by zerg `is_ident` and its kin.
+zsh allows assignment to, and expansion of, such variables (like `999=foo`).
+But `typeset`, `env`, etc. seem unaware of them, while `-v` says
+they exist whether they do or not.
 
 * `idents` -- one or more `ident` items, separated by whitespace.
 

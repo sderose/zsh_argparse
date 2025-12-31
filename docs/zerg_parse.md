@@ -18,7 +18,7 @@ already know Python `argparse`)
 In your [.zprofile] or other setup file, do:
 
 ```
-    source zerg_setup.sh
+    source zerg_setup.zsh
 ```
 
 In a given shell function, create a zerg parser to store the argument

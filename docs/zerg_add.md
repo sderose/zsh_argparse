@@ -1,8 +1,8 @@
-==Help for add_argument.sh==
+==Help for zerg_add.sh==
 
 (part of the zsh_argparse library)
 
-`add_argument` is pretty closely modeled on
+`zerg_add` is pretty closely modeled on
 Python argparse [https://docs.python.org/3/library/argparse.html].
 But the syntax, set of types, and so on are changed to fit zsh.
 
@@ -12,13 +12,14 @@ See [zerg_compact.md] for details.
 
 
 ```
-    source parser_args.sh
+    source zerg_setup.zsh
+    zerg_new OPTS --case-ignore
     ...
-    add_argument OPTS "--maxChar" --type int --default 65535 \
+    zerg_add OPTS "--maxChar" --type int --default 65535 \
         --help "When displaying code points, skip any above this."
-    add_argument OPTS "---verbose -v" --action COUNT \
+    zerg_add OPTS "---verbose -v" --action COUNT \
         --help "How verbose should I be? Repeatable."
-    add_argument OPTS "--quiet --silent -q" --action store_true \
+    zerg_add OPTS "--quiet --silent -q" --action store_true \
         --help "Suppress most messages."
 ```
 
@@ -36,7 +37,7 @@ array of options is returned by parse_args, unless you say otherwise via
 need to go at the end, after any other of the options described next.
 
 After the reference name come options (almost entirely) corresponding
-to the keyword arguments of Python argparse.add_argument.
+to the keyword arguments of Python `argparse.add_argument`.
 
 After all the options have been defined, use parse_args on the
 command line arguments (typically `$*` or `$@` within a function),
@@ -56,30 +57,50 @@ any prior definition (whether it was done earlier within the same invocation
 of the same shell function, in a prior invocation, or in a different function).
 
 
-==Options for `add_argument`==
+==Options for `zerg_add`==
 
-The most important options are probably `action`, `type`, `help`, and `default`.
-These and others are discussed below in alphabetical order.
+The first 2 arguments to `zerg_add` are not really options. They must always
+be:
+    * The name of the parser (created by `zerg_new`) that owns the option; and
+    * A space-separated list of names for the option.
 
-===add_argument --action===
+```
+    zerg_add OPTS "--verbose -v" --action count
+```
+
+By default, zerg parsers ignore case for option names. So
+any of these (and many others) could be used to specify the option whose
+reference name is "verbose" (assuming there are no
+conflicting options, such as `--verify` which would rule out abbreviations
+shorter than `--veri`):
+
+    -v --ve --ver --VeR --VER --verify
+
+The first name given in the list, is called the "reference" name,
+and is the name under which a result value
+is stored. However, you can choose a different key by setting `--destination`.
+
+The most important options to `zerg_add` are `action`, `type`, `help`, and `default`,
+which are discussed next. Other options follow them, in alphabetical order.
+
+===zerg_add --action===
 
 `--action` determines whether another token is read (from right after the option
 name on the command line), and in either case, what to store or do.
 
-Action names are lower-case with underscores. However, there is also shorthand.
-For example, instead of `--action store_true` you can just say `--store-true` (note the hyphen vs. underscore; a difference also from Python argparse).
+Action names are lower-case with underscores, such as "store_true".
+However, there is also shorthand: instead of `--action store_true`
+you can just say `--store-true`. In that case, be careful to change
+any internal underscores to hyphens, as are typical in option names.
 Each action name except `help` is available as its own option this way.
-`help` is *not* a shorthand for `--action help`, because it already is taken
-for specifying an option's help text.
+`help` is *not* a shorthand for `--action help`, because that option name
+is already taken (for specifying an option's help text).
 
 The actions are mostly the same as for Python argparse. The first ones listed
 are cases where no separate value follows the option name itself:
 
-* `store` -- this is the default action, and simply stores the following
-token (or tokens, if `nargs` is involved).
-
 * `store_const` -- sets the option's value to that of the `--const`
-option (which should also be specified on the same add_argument call).
+option (which should also be specified on the same zerg_add call).
 
 * `store_true` -- sets the option's value to 1.
 
@@ -122,8 +143,8 @@ as simply a space-separated string.
 
 TODO: It is likely this behavior will be improved by putting the string in the
 form `typeset -a` accepts for arrays so it is trivial to convert it to
-an actual zsh array by passing it to `typeset`; or possibly to use zsh's "paired"
-feature to create a parallel string and array.
+an actual zsh array by passing it to `typeset` (see also [zerg_types.sh] and
+the `packed` types).
 
 * `append_const` -- like `append` but adds the value of `--const` instead of
 taking the next token from the command line being parsed.
@@ -132,27 +153,82 @@ taking the next token from the command line being parsed.
 I anticipate this just being the same as `append`, with both handling `nargs`.
 
 
-===add_argument --type===
+===zerg_add --type===
 
 `--type [name]` says what datatype the parsed value should be.
-These are *not* just the zsh types, but cover a much wider range.
+These are *not* the zsh types (array, assoc, etc.), but cover a much wider range
+(though you can add your own in Python more easily than here).
 For example, there are types for dates and times, identifiers, urls, paths,
-and so on -- even though zsh would group all those under "scalar" (or "string").
+integers in different bases,
+variable names, command names, pids, etc.
+zsh groups Most things under "scalar" (or "string").
 By distinguishing them here zsh_argparse can provide much more thorough
-value checking (again like Python argparse).
+value checking for what actually appears on command lines.
 
-There are more types provided than Python argparse provides (though you can
-add your own there, more easily than here).
-The specific argument type are described in [bootstrap_defs.md].
-
-The type names are in `\$zerg_types`, which is defined in [zerg_setup.sh].
+The type names are listed in as assoc named `\$zerg_types`, which is
+defined in [zerg_setup.sh].
 Each type also has a tester named "is_" plus the type name,
-defined in [parse_args.sh] (because checking strings against the declared type
-is part of parsing command lines).
+defined in [parse_args.sh]. A few of the testers have options, for example
+enabling `is_path` to test permissions and `is_tensor` to check shapes.
 
-Like actions, argument types can be specified as options under their own name,
-not just as values for `--type`. For example, to require an option's
-value to be an integer in any of decimal ("65"), octal ("0o101"),
+When a value doesn't fit the type, a message is also printed
+unless you gave the `-q` option (spelled only as -q or --quiet, sorry).
+
+Note: zerg include [/lib/utils/zerg_types.py], which can be imported or
+harvested for use in Python code. It provides a function named to match
+each zerg type, which can be passed to Python `argparse.add_argument`'s
+`type` parameter in the usual fashion. Some support options (see below for
+the zerg equivalent), and Python lambda or partials can be used for those.
+
+===Type-checkers===
+
+Each zerg type has a corresponding shell function
+that returns 0 if the value passed fits the datatype, or 1 if not.
+For example:
+
+```
+    if is_int "$foo"; then...
+    [[ is_tensor --shape "2 3" "( (-1 2 3) (4 5 6.02214076E+23) )" ]] || exit 99
+```
+
+Do not confuse *zerg* types with the built-in *zsh* types as set via `typeset`.
+zsh knows `undef`, `scalar`, `integer`, `float`, `array`, and `assoc` (plus
+many modifiers such as global/local, hidden, and so on).
+zerg provides function to help with those:
+`zsh_type [var-name]` returns one the applicable one of those 6 zsh types.
+`is_of_zsh_type [type-name] [var-name]` tests whether the variable is of
+the given type ("undef" can be tested just fine), and fails or succeeds.
+
+There is no `zerg_type` function, because a given string might fit many types.
+For example, "1" can be int, float, complex, or prob (not to mention
+path, alias, pid, str, etc.).
+zsh types are types of variables per se, as determined by `typeset`;
+zerg types are about how strings (especially option values in command lines)
+can be interpreted.
+
+====Using type-checker options with --type====
+
+A few type-checkers support sub-types or options. For example, `is_path` has
+options that require the path to point to an existing file or directory, to an
+object with certain permissions, etc. When testing a string via a type-checking
+function, options are passed in the usual zsh fashion:
+    is_path -d "$myPath" || return 99
+
+To get this effect when defining an argument, just quote the options together
+with the type name, like:
+
+    zerg_add MYPARSER "--src-dir" --type "path -d"
+
+Note: This syntax is parsed and accepted by `zerg_add`, but not yet
+supported when parsing actual command lines with `zerg_parse`. It should
+be added soon.
+
+===Type Shorthand===
+
+As with actions, argument types can be specified as options under their own name,
+not just as values for `--type`. However, this is not allowed if you need
+options to the type-checker (see above). For example, to require an
+option's value to be an integer in any of decimal ("65"), octal ("0o101"),
 hexadecimal ("0x0041"), use either of these:
 
 ```
@@ -160,129 +236,90 @@ hexadecimal ("0x0041"), use either of these:
     --anyint
 ```
 
-Recall that `--type` just constrains the string values given in actual
+===Command-line syntax vs. internal datatype===
+
+`--type` mainly constrains the string values given in actual
 command lines when they are parsed. It has little to do with how the values
 are stored in zsh. The values are stored unchanged, as zsh scalars/strings.
-Thus, if an anyint option's value was entered as "0x41", that's what's
-stored -- not the equivalent zsh integer value like `typeset -i x=65`.
+Thus, if an anyint option's value was entered as "0x41", that is what is
+stored. If a string like "0x41" is in a variable `X`, get
+the integer equivalent via `$((x))`.
 
-TODO: I may add a `--destination-type` argument to enable casting in such
-cases, but that has at least 2 problems: zsh associative arrays such as
-what parse_args creates, cannot store non-string values; and some usages
-may want to use the distinctions, such as allowing either hex or decimal values
-for a given option, but treating them somehow differently (such as
-printing some output in the same base that was used for the option).
-
-Each argument type also has a corresponding shell function that returns 0 if the
-value passed fits the datatype, or 1 if not. For example, you can say
-
-```
-    if is_int "$foo"; then...
-```
-
-When a value doesn't fit the type, a message is also printed
-unless you gave the `-q` option (spelled only that way, sorry).
-
-Do not confused this with the `zsh_type` function, which returns the actual
-zsh base type of a given shell variable, as determined by `typeset`.
-"sv" in the function name is short for "shell variable",
-since of course this function is not limited to associative arrays ("aa").
-The value returned by `zsh_type` is one of `undef`, `scalar`, `integer`, `float`, array, assoc -- which are zsh `typeset` types, not patterns for expressing
-other types in command lines.
+One exception is that an argument definition can specify `--fold [upper|lower|none]` to cause the argument's value from the command line to
+be case-folded before storage.
 
 
-==add_argument --help==
+===zerg_add --help===
 
-This just provides a help string describing the option. Programs can display
-it when you request help, or use it to compose rudimentary documentation, etc.
+This provides a help string describing the option. Programs can display
+it when you request help, use it to compose documentation, etc.
 
-
-==add_argument --default==
+===zerg_add --default===
 
 This provides a value for the option, if the option isn't specified at all in
 a particular command line.
 
 
-==Other options to add_argu,ent==
+=Other options to add_argument=
 
-As noted, all of the actions and type values can be given as options to
-add_argument on their own, rather than as values for `--action` or `--type`.
+As noted above, all of the actions and type values can be given as options to
+`zerg_add` on their own, rather than as values for `--action` or `--type`.
 This is purely for convenience, and they are not listed below.
 
 [TODO Review the list below, a few are wrong or obsolete]
 
-==add_argument refname==
+===zerg_add --flag===
 
-(TODO not really an option (no "--"). A space-separated list of
-names for the option. parse_args be default ignores case, ignores internal
-underscores and hyphens, and accepts unique abbreviations. So given
+This is just shorthand for `--type bool --action store_true`.
 
-```
-    add_argument OPTS "--verbose -v" --action count
-```
-
-All of these (and many others) would be matched (assuming there are no
-conflicting options such as `--verify`, which would rule out abbreviations
-shorter than `--veri`):
-
-    -v --ve --ver --VeR --VER --verify
-
-The first name given in the list, is considered the "reference" name,
-and is the key under which the result (or the value from `--default`)
-is store. However, you can choose a different key by using `--destination`,
-like in Python argparse.
-
-==add_argument --reset==
-
-==add_argument --flag==
-
-TODO Check?
-
-==add_argument --required (or -r)==
+===zerg_add --required (or -r)===
 
 This takes no value, and merely specifies that the given option
 must always be provided.
 
-==add_argument --choices [idents] (or -c)==
+===zerg_add --choices [idents] (or -c)===
 
-This takes a string of (space-separated) tokens, from among which the option's
-value must be selected. If `--fold` (see below) is also set, matching will
+This takes a string of space-separated tokens, from among which the option's
+value must be selected. If `--ignore-case-choices` was set on the owning
+parser, matching these values will
 ignore case, though the value stored will be as given (not folded).
+This is separate from the `--ignore-case-options` setting; both apply
+to all of a parser's options, not particular ones.
 
-==add_argument --nargs [int]==
+===zerg_add --nargs [int]===
 
 The number of following tokens to be consumed for the value.
-This almost always defaults to 0 or 1 depending on `--action`.
-It also accepts "remainder" to take all remaining arguments.
+This defaults to 0 or 1 depending on `--action`.
+It also accepts other unsigned integer values, "*", "+", "?".
+It does *not* (yet) support "REMAINDER" to take all remaining arguments.
 
-==add_argument --const [value] (or -k)==
+===zerg_add --const [value] (or -k)===
 
 A value to be stored when the action is `store_const` or `append_const`.
 
-==add_argument --dest [varname] (or -v)==
+===zerg_add --dest [varname] (or -v)===
 
 The name under which to store the option value. If not specified, the
 option's reference name (the first value given in `refname`, but not including
-leading hyphens) is used.
+leading hyphens, and with internal hyphens changed to underscores) is used.
 
-==add_argument --fold [lower|upper|none]==
+===zerg_add --fold [lower|upper|none]===
 
-Whether to convert the value to uniform case before storing.
-Not to be confused with the zerg *parser* options `--ignore-case`
-(which control how option names themselves are matched)
-and and `--ignore-case-choices` (which does the same for the values of `choices` arguments).
+Whether to convert the *value* to uniform case before storing.
+Not to be confused with the zerg *parser* options `--ignore-case-options`
+(for how option names themselves are matched)
+and and `--ignore-case-choices` (for how values of `choices` arguments are matched).
 
-==add_argument --format [pct-string]==
+===zerg_add --format [pct-string]===
 
-This lets you specify a printf-style % code which should be used to display
+This lets you specify a printf-style % code which may be used to display
 the value, should the occasion arise.
 
-TODO: Finish
-
-==add_argument --pattern [regex]==
+===zerg_add --pattern [regex]===
 
 This takes a zsh-style regular expression that the option value must match.
-
+The match is checked using zsh's `=~` operator, and does not require
+matching the *complete* value unless you include ^ and $ in the regex.
 
 ==Storage==
 
@@ -298,7 +335,7 @@ Items with empty values may be omitted.
 * `\uEDDA_CLASS` -- (the first character is U+EDDA) -- this
 key is used to self-identify the assoc as an instance of a zerg object class,
 in this case named "ZERG_ARG_DEF".
-The key in `$ZERG_CLASS_KEY`, set in [zerg_objects.sh].
+The key is availab le in `$ZERG_CLASS_KEY`, set in [zerg_objects.sh].
 * `arg_names` -- the list of space-separated names for the argument.
 * `action` -- a choice from `$zerg_actions` (see [zerg_add.md]).
 * `choices` -- (since zsh cannot store arrays as data in assocs, the choices

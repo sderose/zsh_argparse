@@ -9,8 +9,10 @@ local TEST_TYPES="1"
 local TEST_ACTIONS="1"
 local TEST_TOGGLE="1"
 
-source test_funcs.sh
-source ../zerg_setup.sh
+if ! [ -v ZERG_SETUP ]; then
+    source ../zerg.plugin.zsh
+fi
+source test_funcs.zsh
 
 if [[ `zsh_type PARSER` != "undef" ]]; then
     warn "'PARSER' already defined. Nuking it first."

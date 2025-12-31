@@ -3,9 +3,10 @@
 # Stress test for zerg type system
 # Tests edge cases, boundary conditions, Unicode, and error handling
 
-if [ -z "$zerg_types" ]; then
-    source zerg_setup.sh || { warn "Could not source zerg_setup.sh."; exit 99 }
+if ! [ -v ZERG_SETUP ]; then
+    source ../zerg.plugin.zsh
 fi
+source test_funcs.zsh
 
 warn "====STRESS TESTING ZERG TYPE SYSTEM"
 

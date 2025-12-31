@@ -220,7 +220,7 @@ exist -- so don't do `zerg_del OTHERP`. `zerg_use` re-uses the very same
 definition, directly from the very same shell variable holding its
 original definition. Thus you can't change it -- you have to use it as-is.
 
-For convenience, [zerg_setup.sh] sources [zerg_ZERG.sh] provides (well, soon will...) a parser also
+For convenience, [zerg_setup.sh] sources [zerg_ZERG.zsh] provides (well, soon will...) a parser also
 named "ZERG", with commonplace argument definitions ("help" is already covered
 by the `zerg_new --add-help` option).
 

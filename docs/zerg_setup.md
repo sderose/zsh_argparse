@@ -8,9 +8,8 @@ zerg library. It also defines several named return codes and their values.
 warn [n] [message] -- display the message to stderr if the message level (stored
 in $ZERG_V) is at least as high as n. Also, it fills in a partial
 traceback at the start of the message, for as many levels as $ZERG_TR.
-
-tHead [message] -- display the message to stderr, with a blank line above
-and a loud marker at the start.
+If the message begins with "===", it will remove that but print a blank line,
+a separator line, then the remainder of the message.
 
 ===General functions on shell variables ===
 
@@ -46,7 +45,7 @@ Backslash any internal single quotes and backslashes.
 This uses zsh ${(qq)...}; zsh has ${(q)name} (and qq, qqq, and qqqq).
 
 
-zsh_tostring [varname] -- this is essentially the same as `typeset -p [varname]`.
+zsh_pack [varname] -- this is essentially the same as `typeset -p [varname]`.
 
 str_escape [-f formatname] string
 Escape the string as needed for the given format (default: html).
@@ -62,28 +61,14 @@ Options:
     -- Mark end of options (say, if string to escape may start with "-")
 
 
-===The "req_" tests===
+===The "req_argc" test===
 
-Several functions beginning "req_" are used to test a condition, and
-return whether it was satisfied (rc 0) or not (rc non-zero). They also
-print a message unless given the `-q` option.
+req_argc [min] [max] [have] -- used to test whether the number of
+arguments to a shell function (typically passed as the [have] parameter
+via "$#"), is at least [min] and at most [max].
 
-These are used throughout zerg as a short, uniform way to test argument and
-other constraints, typically like:
+It also prints a message unless given the `-q` option.
+Typical use:
 
     req_argc 1 2 $# || return ZERR_ARGC
-    req_zsh_type assoc "$1" || return ZERR_ZSH_TYPE
 
-req_zsh_type [type] [varname] -- test whether the named shell variable is
-of the given type (one of undef, scalar, integer, float, array, or assoc).
-
-req_zerg_type [type] [value] -- test whether the given value (the second
-argument is *not* a variable name like for `req_zsh_type`), is a string
-that satisfies the given zerg type (see `zerg_types.sh` and `zerg_types.md`).
-
-req_aa_has [varname] [key] -- test whether the named variable (which must
-be an associative array) contains the given key.
-
-req_argc [min] [max] [have] -- normally used to test whether the number of
-arguments to a shell function (typically passed as the [have] parameter
-via "$#"), is at least min and at most max.

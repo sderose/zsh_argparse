@@ -8,13 +8,15 @@ v=0  # verbose
 
 ###############################################################################
 #
-source test_funcs.sh
-source ../zerg_setup.sh
+if ! [ -v ZERG_SETUP ]; then
+    source ../zerg.plugin.zsh
+fi
+source test_funcs.zsh
 
 # Test general shell variable (zsh_) functions.
 
 
-tHead "Testing zsh_type"
+warn "====Testing zsh_type"
 if [ ${(t)aav_x} ] || [ ${(t)NOBODY_HOME} ]; then
     #warn 0 "aav_x already exists, cancelling $0...."
     #return 99
@@ -43,7 +45,7 @@ testOutput 'assoc' zsh_type aav_asc
 unset VN AAA
 VN="AAA"
 
-tHead "Testing init/set/etc."
+warn "====Testing init/set/etc."
 testRC FAIL aa_get -q $VN no_var
 
 testRC 0 aa_init $VN
@@ -63,7 +65,7 @@ testOutput "hello, there" aa_get AAA greet
 testOutput 3 aa_len $VN
 
 
-tHead "Testing Lengths"
+warn "====Testing Lengths"
 #testOutput 2 ${(P)#VN}
 testOutput 3 aa_len $VN
 
@@ -72,12 +74,12 @@ testOutput "hello, there" aa_get $VN greet
 testOutput "dval" aa_get -d dval $VN not_a_key
 
 
-tHead "Getting non-item"
+warn "====Getting non-item"
 testRC FAIL aa_get -q $VN nope
 #echo "Did we see em?"
 
 
-tHead "Testing has/unset"
+warn "====Testing has/unset"
 #typeset -p $VN
 testRC 0 aa_has $VN greet
 #echo "unsetting 'greet'"
@@ -89,7 +91,7 @@ testRC FAIL aa_get -q $VN greet
 #typeset -p $VN
 
 
-tHead "Testing keys/values/clear"
+warn "====Testing keys/values/clear"
 testRC PASS aa_keys $VN
 testRC PASS aa_values $VN
 testRC PASS aa_clear $VN
@@ -99,7 +101,7 @@ testOutput "0"  aa_len $VN
 
 ###############################################################################
 #
-tHead "Testing zsh_quote"
+warn "====Testing zsh_quote"
 testRC FAIL zsh_quote -q NOBODY_HOME
 testOutput "'foo'" zsh_quote aav_x
 testOutput "134217727" zsh_quote aav_y
@@ -111,19 +113,19 @@ local -A aav_colors=( [magenta]="a mixture" [red]=1 [green]="2" )
 testRC PASS aa_eq aav_asc aav_colors
 
 
-tHead "Testing zsh_tostring"
-testRC FAIL zsh_tostring -q NOBODY_HOME
-testOutput "foo" zsh_tostring aav_x
-testOutput "134217727" zsh_tostring aav_y
-testOutput "1.6180338000" zsh_tostring aav_phi
-testOutput "( 1 2 3 d e f 3.14 )" zsh_tostring aav_arr
+warn "====Testing zsh_pack"
+testRC FAIL zsh_pack -q NOBODY_HOME
+testOutput "foo" zsh_pack aav_x
+testOutput "134217727" zsh_pack aav_y
+testOutput "1.6180338000" zsh_pack aav_phi
+testOutput "( 1 2 3 d e f 3.14 )" zsh_pack aav_arr
 
 local aa_ascStr=`typeset -p aav_asc | sed 's/^[^=]*=//'`
 #echo "\$aa_ascStr is: $aa_ascStr"
-testOutput "$aa_ascStr" zsh_tostring aav_asc
+testOutput "$aa_ascStr" zsh_pack aav_asc
 
 
-tHead "Testing str_escape"
+warn "====Testing str_escape"
 s="A \"string\" with 'apos', &, <, ]]>, and \\."
 testRC FAIL str_escape -q -f xyzzy
 testOutput "A &quot;string&quot; with 'apos', &amp;, &lt;, ]]&gt;, and \\." str_escape "$s"
@@ -140,7 +142,7 @@ testOutput "A+%22string%22+with+%27apos%27%2C+%26%2C+%3C%2C+%5D%5D%3E%2C+and+%5C
 
 # TODO utf8
 
-tHead "Testing find_key"
+warn "====Testing find_key"
 
 typeset -A spam=( b 1 bat 3 bath 4 bathySPHere 11 cat 3 catoblepus 10 )
 testOutput b aa_find_key spam b
@@ -163,7 +165,7 @@ testOutput "" aa_find_key -i spam DoppleGanger
 
 
 
-tHead "Testing aa_export"
+warn "====Testing aa_export"
 
 unset htmltableForm htmldlForm jsonForm pythonForm zshForm
 htmltableForm='<table id="aav_asc">
@@ -193,4 +195,4 @@ zshForm="( [magenta]=\"a mixture\" [red]=1 [green]=2 )"
 testOutput "$zshForm" aa_export -f zsh aav_asc
 
 
-tHead "Total fails: $FAILCT."
+warn "====Total fails: $FAILCT."
