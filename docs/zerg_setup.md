@@ -60,6 +60,10 @@ Options:
     -f url: Various characters to UTF-8 and %xx encoding
     -- Mark end of options (say, if string to escape may start with "-")
 
+split_argdef_name -- break up the parser name vs. option reference name parts.
+
+join_argdef_name -- assemble the name for an argument definition from
+a parser name and an option reference name.
 
 ===The "req_argc" test===
 

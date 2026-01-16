@@ -44,7 +44,7 @@ _bin_re="0[Bb][01]+"
 
 _ident_re="[a-zA-Z_][a-zA-Z0-9_]*"
 _uident_re="[_[:alpha:]][_[:alnum:]]*"
-_argname_re="([-+][a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]+)"
+_argname_re="([-+][a-zA-Z]|--[a-zA-Z][-a-zA-Z0-9]*)"
 
 _time_re="([0-1][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9](\.[0-9]+)?)?"
 # Time zone offset should not be >12h, but a few are....
@@ -743,8 +743,8 @@ is_date() {
         return $ZERR_NOT_OF_TYPE
     fi
     local y=$parts[1] m=$parts[2] d=$parts[3]
-    warn "parts:  '$y' '$m' '$d'."
-    setopt xtrace
+    #warn "parts:  '$y' '$m' '$d'."
+    #setopt xtrace
     if [[ "$y" == "0000" || ! "$y" =~ ^([0-9][0-9][0-9][0-9])$ ]]; then
         [ $quiet ] || warn "'$1' is not a valid ISO8601 (year $y)."
         return $ZERR_NOT_OF_TYPE

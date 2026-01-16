@@ -10,7 +10,7 @@ fi
 # it would collide with --help [message].
 typeset -xHA zerg_actions=(
     [store]=1 [store_const]=0 [store_false]=0 [store_true]=0
-    [toggle]=0 [count]=0 [version]=0
+    [switches]=0 [count]=0 [version]=0
     [append]=1 [append_const]=0 [extend]=1
 )
 # Turn that into 'case' expr --store|--store-const....
@@ -35,7 +35,7 @@ _zerg_argdef_init() {
         warn 0 "Cannot create zerg parser arg '$def_name', variable already exists."
         return $ZERR_DUPLICATE
     elif [[ $priorType == "assoc" ]]; then
-        local parser_name=`argdef_split -p $def_name`
+        local parser_name=`split_argdef_name -p $def_name`
         local disp=$(aa_get "$parser_name" "on_redefine")
         if [[ $disp == allow ]] || [[ $disp == "" ]]; then
             unset "$def_name"
@@ -123,7 +123,7 @@ EOF
         fi
     done
     local ref_name=$arg_names_list[1]
-    local def_name=`get_argdef_name -- $parser_name $ref_name`
+    local def_name=`join_argdef_name -- $parser_name $ref_name`
     #print "\nAliases '$arg_names', ref_name '$ref_name', def_name '$def_name'."
     shift 2
 
@@ -241,14 +241,14 @@ EOF
     done
 
     local action=`aa_get $def_name action`
-    if [[ $action == toggle ]]; then
+    if [[ $action == switches ]]; then
         # Fix action on positive arg def
         aa_set $def_name action store_true
 
         # Build negative arg def
         local ref_name=${def_name#[^_]*__}
         local neg_ref_name="no_$ref_name"
-        local neg_def_name=`get_argdef_name $parser_name $neg_ref_name`
+        local neg_def_name=`join_argdef_name $parser_name $neg_ref_name`
         #warn 0 "ref $ref_name, neg_ref $neg_ref_name, neg_def $neg_def_name."
         typedef -ghA "$neg_def_name"
         local dft_dest=$ref_name[${#parser_name}+2,-1]
@@ -265,7 +265,7 @@ EOF
         aa_set $neg_def_name action store_false
     fi
 
-    [ `aa_get -q "$parser_name" "export"` ] || export -n $def_name
+    [ `aa_get -q "$parser_name" "export"` ] && export $def_name
     aa_append_value $parser_name "all_def_names" "$def_name "
     aa_append_value "$parser_name" "all_arg_names" "$arg_names "
     [ $required ] && aa_append_value "$parser_name" "required_arg_names" "$ref_name "

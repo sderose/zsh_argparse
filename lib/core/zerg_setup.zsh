@@ -409,11 +409,11 @@ EOF
     echo $x
 }
 
-get_argdef_name() {
+join_argdef_name() {
     local quiet must_exist
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage get_argdef_name [--] parsername refname
+Usage join_argdef_name [--] parsername refname
     Given a parser name and argument refname, return the name
     of the associative array in which the argument def should be stored.
     The parser name must be that of the parser that *defines* the
@@ -444,11 +444,11 @@ EOF
     echo $defname
 }
 
-argdef_split() {
+split_argdef_name() {
     local parser quiet refname
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
-Usage split_argdef [--] argdefname
+Usage split_argdef_name [--] argdefname
     Given an argument definition name, like MYPARSER__quiet,
     separate the parser name and option name. Echo them with a space.
 Options:

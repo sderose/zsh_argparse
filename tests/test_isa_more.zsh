@@ -486,10 +486,10 @@ run_test fail epoch "" "(empty)"
 warn "====STRESS TESTS: Extreme inputs"
 
 # Very long strings
-local -r long_int="123456789012345678901234567890123456789012345678901234567890"
+local long_int="123456789012345678901234567890123456789012345678901234567890"
 run_test pass int "$long_int" "(very long integer)"
 
-local -r long_ident="x_$(printf 'a%.0s' {1..200})" # 200+ char identifier
+local long_ident="x_$(printf 'a%.0s' {1..200})" # 200+ char identifier
 run_test pass ident "$long_ident" "(very long identifier)"
 
 # Empty and whitespace

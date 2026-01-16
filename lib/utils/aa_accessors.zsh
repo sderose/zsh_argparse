@@ -79,6 +79,81 @@ EOF
     done
 }
 
+aa_from_keys() {
+    local value=1 quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: aa_from_keys [--value v] dest_assoc_name source_array_name
+    Create an associative array with keys drawn from a regular array.
+    By default all keys get the value 1 (but see --value).
+Arguments:
+    dest_assoc_name: name of associative array to create
+    source_array_name: name of array whose elements become keys
+Options:
+    --value v: value to assign to all keys (default: 1)
+        Use "*" to set each value the same as its key.
+EOF
+            return ;;
+        -q|--quiet) quiet=" -q" ;;
+        (--value) shift; value="$1" ;;
+        (--) shift; break ;;
+        (*) tMsg warn "Unknown option '$1'."; return 99 ;;
+    esac; shift; done
+
+    req_argc 2 2 $# || return $ZERR_ARGC
+    is_of_zsh_type array "$2" || return $ZERR_ZSH_TYPE
+    local dest_name="$1" source_name="$2"
+    typeset -gA $dest_name=()
+    local key
+    for key in ${(P)source_name}; do
+        if [[ "$value" == "*" ]]; then
+            aa_set $dest_name "$key" "$key"
+        else
+            aa_set $dest_name "$key" "$value"
+        fi
+    done
+}
+
+aa_from_string() {
+    local value=1 sep=' ' quiet
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: aa_from_string [--value v] [--sep s] dest_assoc_name s
+    Create an associative array with keys parsed from the string s,
+    by splitting it on sep (default: space).
+    By default all keys get the value 1 (but see --value).
+Arguments:
+    dest_assoc_name: name of associative array to create
+    s: the string to parse
+Options:
+    --sep s: Split the strong on this delimiter string. This is done
+        via ${(ps:$sep)$string}.
+    --value v: value to assign to all keys (default: 1)
+        Use "*" to set each value the same as its key.
+TODO: There should probably be an option to treat the tokens as alternating
+keys and values.
+EOF
+            return ;;
+        -q|--quiet) quiet=" -q" ;;
+        (--sep) shift; sep="$1" ;;
+        (--value) shift; value="$1" ;;
+        (--) shift; break ;;
+        (*) tMsg warn "Unknown option '$1'."; return 99 ;;
+    esac; shift; done
+
+    req_argc 2 2 $# || return $ZERR_ARGC
+    local dest_name="$1"
+    typeset -gA $dest_name=()
+    local key
+    for key in ${(ps:$sep:)2}; do
+        if [[ "$value" == "*" ]]; then
+            aa_set $dest_name "$key" "$key"
+        else
+            aa_set $dest_name "$key" "$value"
+        fi
+    done
+}
+
 aa_copy() {
     local quiet
     while [[ "$1" == -* ]]; do case "$1" in
@@ -649,18 +724,21 @@ EOF
 }
 
 
-###############################################################################
-# Additions to supported abbreviated keys
+##############################################################################
+# Additional retrievers
 #
 aa_find_key() {
     local quiet ic
     while [[ "$1" == -* ]]; do case "$1" in
         (${~HELP_OPTION_EXPR}) cat <<'EOF'
 Usage: aa_find_key [options] assoc_name partial_key
-    Find minimum unique key matches in the named associative array.
-    If there's an *exactly* matching key (with -i, it must be the only exact
-    match even while ignoring case). then it is returned even if
-    there are also other keys that begin with it.
+    Find all keys in the named associative array that match "partial_key".
+    If there's an *exactly* matching key, just return it even if some
+    other key begins with partial_key (considering --ignore-case).
+    Otherwise, return all such keys, and a return code indicating
+    how many were found. If the key has a unique match, print the full
+    form of the key and return success.
+    and
 Arguments:
     assoc_name: name of the associative array
     partial_key: partial key to match against
@@ -772,3 +850,42 @@ EOF
             return 2 ;;
     esac
 }
+
+aa_find_keys_by_value() {
+    local quiet ic sep=" "
+    while [[ "$1" == -* ]]; do case "$1" in
+        (${~HELP_OPTION_EXPR}) cat <<'EOF'
+Usage: aa_find_keys_by_value [options] assoc_name val
+    Find all keys in the named associative array whose value is val.
+    Return all such keys, separated by the --sep (default: space).
+Options:
+    -i|--ignore-case: case insensitive
+    -q|--quiet: suppress messages
+    --sep s: Separator in returned list.
+EOF
+                return ;;
+            -i|--ignore-case) ic=1 ;;
+            -q|--quiet) quiet='-q' ;;
+            --sep) shift; sep="$1" ;;
+            --) shift ; break ;;
+            *) warn 0 "Unknown option '$1'."; return $ZERR_BAD_OPTION ;;
+        esac
+        shift
+    done
+
+    req_argc 2 2 $# || return $ZERR_ARGC
+    is_of_zsh_type assoc "$1" || return $ZERR_ZSH_TYPE
+    local assoc_name="$1" val="$2"
+    [[ "$ic" == "1" ]] && val="${val:l}"
+
+    local -a matches
+    for key in ${(k)${(P)assoc_name}}; do
+        local cval=${${(P)assoc_name}[$key]}
+        [[ "$ic" == "1" ]] && cval="${key:l}"
+        [[ "$cval" == $val ]] && matches+="$key"
+    done
+
+    [ $#matches -eq 0 ] && return 1
+    echo ${(pj:$sep:)matches}
+}
+

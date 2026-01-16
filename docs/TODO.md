@@ -2,6 +2,9 @@
 
 ===Known bugs and limitations===
 
+* Rationalize separators allowed between option aliases, choices, and
+in compact vs. full. Probably allow [,|\s]+
+
 * Finish `--version`
 
 * Finish `--nargs REMAINDER`
@@ -20,8 +23,19 @@ items in the parser assoc so they can't collide with plain names.
 like `zerg_add --type 'path -r -e'` so you just unbundle the tokens when
 calling `is_path` (or whatever). Code to parse/store, but not use, is in.
 
+* Finish _zerg_def_to_case
+
+* Finish metavar insertion into usage. Add --metavar-short or similar so
+the names don't just repeat the arg name when --metavar is not set, but
+abbreviate to first letter or something.
+
 
 ===Features===
+
+* Finish 'switches' support in argparse and case exports.
+
+* How should "switches" appear in help? Just as the positive, maybe with
+an appended " (negatable)" or similar?
 
 * Add capability to give any number of argname:typename=defaultval items
 at once on zerg_new!!! See [zerg_compact.sh].
@@ -62,7 +76,10 @@ Or show as a single msg such as "Also supports the options of xxx."
 
 * Should aa provide a way to find all key(s) matching a given value?
 
-* 'toggle' uses +x for short opts, so `is_argname` allows it.
+* 'switches' uses +x for short opts, so `is_argname` allows it. Ok?
+
+* aa_from_string: There should probably be an option to treat the tokens
+as alternating keys and values.
 
 * Check parser compatibility with `zerg_parent`: add_help, case, ....
 
@@ -111,7 +128,8 @@ like (-h|-he|-hel|-help)....
 
 * Maybe add `is_path` tests like [ugo][rwx], tests for fifos, whiteouts, etc.
 
-* Add `--format` support? Integrate wth typeset
+* Add `--format` support? Integrate wth typeset?
+Use with aa_get, aa-export, and for storing from zerg_parse?
 
 * Check whether Linux uses en_GB.ISO8859-1 or en_GB.ISO-8859-1.
 

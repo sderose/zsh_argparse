@@ -7,6 +7,29 @@ But not all operations are easy, some seem to require eval, and the
 syntax required may not be the easiest to remember or predict. Therefore,
 these functions, which largely mirror the methods on Python dicts:
 
+* aa_init [varname]
+
+Create the named associative array if it doesn't exist already.
+This does not clear data if the associative array already exists; for
+that see `aa_clear`.
+
+* aa_clear [varname]
+
+Removes all items from the named associative array.
+
+* aa_from_keys [--value v] dest_assoc_name source_array_name
+
+Create an associative array with keys drawn from a regular array.
+All keys get the value given on `--value` (default: 1), unless `--value '*'` is
+specified, in which case each value will be set the same as its key.
+
+* aa_from_string [--value v] [--sep s] dest_assoc_name string
+
+Create an associative array with keys parsed from the string, by
+splitting it on sep (default ' ') using ${(ps:$sep)$string}.
+All keys get the value given on `-d`(default: 1), unless `-d '*'` is
+specified, in which case each value will be set the same as its key.
+
 * aa_set [varname] [key] [value]
 
 Sets item with the given key to the given value, in the associated array
@@ -34,16 +57,6 @@ Writes a space-separated list of values to stdout.
 
 Removes the item with the given via `unset`.
 
-* aa_init [varname]
-
-Create the named associative array if it doesn't exist already.
-This does not clear data if the associative array already exists; for
-that see `aa_clear`.
-
-* aa_clear [varname]
-
-Removes all items from the named associative array.
-
 * aa_find_key [varname] [abbrev]
 
 TODO: Don't like the return codes and global.
@@ -62,6 +75,16 @@ present in the associative array, but a default value is supplied via `-d`,
 the default value is returned. On failure such as an ambiguous key or a key
 that is not found and there is not default,
 an error message goes to stderr.
+
+* aa_find_keys_by_value [options] [assoc_name] [val]
+
+Find all keys in the named associative array whose value is val.
+Return all such keys, separated by the --sep (default: space).
+
+Options:
+    -i|--ignore-case: case insensitive
+    -q|--quiet: suppress messages
+    --sep s: Separator in returned list.
 
 * aa_copy source_assoc target_assoc
 

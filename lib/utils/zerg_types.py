@@ -37,25 +37,33 @@ _DURATION_RE = r'P([0-9]+Y)?([0-9]+M)?([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+S)?
 # Integer types
 
 def hexint(value: str) -> int:
-    """Hexadecimal integer (0xABC format)"""
+    """Hexadecimal integer (0xABC format).
+    NOTE: Unlike in zerg, the value is actually cast to Python int.
+    """
     if not re.match(rf'^{_HEX_RE}$', value):
         raise ValueError(f"Not a hex integer: {value}")
     return int(value, 16)
 
 def octint(value: str) -> int:
-    """Octal integer (0o777 format)"""
+    """Octal integer (0o777 format)
+    NOTE: Unlike in zerg, the value is actually cast to Python int.
+    """
     if not re.match(rf'^{_OCT_RE}$', value):
         raise ValueError(f"Not an octal integer: {value}")
     return int(value, 8)
 
 def binint(value: str) -> int:
-    """Binary integer (0b1010 format)"""
+    """Binary integer (0b1010 format)
+    NOTE: Unlike in zerg, the value is actually cast to Python int.
+    """
     if not re.match(rf'^{_BIN_RE}$', value):
         raise ValueError(f"Not a binary integer: {value}")
     return int(value, 2)
 
 def anyint(value: str) -> int:
-    """Any integer format (decimal, hex, oct, bin)"""
+    """Any integer format (decimal, hex, oct, bin)
+    NOTE: Unlike in zerg, the value is actually cast to Python int.
+    """
     if re.match(rf'^{_HEX_RE}$', value): return int(value, 16)
     if re.match(rf'^{_OCT_RE}$', value): return int(value, 8)
     if re.match(rf'^{_BIN_RE}$', value): return int(value, 2)

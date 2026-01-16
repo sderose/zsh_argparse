@@ -100,7 +100,7 @@ _zerg_help() {
 
 _zerg_version() {
     is_of_zerg_class ZERG_PARSER "$1" || return $?
-    local vdef_name=`get_argdef_name $1 "version"` || return $?
+    local vdef_name=`join_argdef_name $1 "version"` || return $?
     print "Version = "`aa_get -- "$1" "--version"`
 }
 
@@ -118,7 +118,7 @@ _zerg_usage() {
         fi
         printf "    %-12s %s%s\n" $key $metavar $help
         local choices=${${(Pqq)adn}[choices]}
-        [ -n "$choices" ] ** print "    ($choices)\n"
+        [ -n "$choices" ] && print "    ($choices)\n"
     done
 }
 
@@ -206,7 +206,7 @@ _zerg_store_arg_values() {  # TODO result_dict
 ###############################################################################
 #
 _zerg_process_option() {
-    #warn "====Processing option '$3'."
+    warn "====Processing option '$3', index_ref=$4."
     # Process an option that takes a value (cover nargs, actions, etc.)
     local parser_name="$1" def_name="$2" opt_name="$3" index_ref="$4"
     is_of_zerg_class ZERG_PARSER "$1" || return $?
@@ -221,7 +221,7 @@ _zerg_process_option() {
     local action=$(aa_get -q "$def_name" "action")
     local var_style=$(aa_get -q $parser_name var_style)
     [ "$var_style" ] || var_style="separate"
-    local result_dict=`get_argdef_name $parser_name "results"`
+    local result_dict=`join_argdef_name $parser_name "results"`
     local dest=`_zerg_find_dest $def_name`
     #warn "####### def_name '$def_name', option '$opt_name', action '$action', dest '$dest'."
 
@@ -241,7 +241,7 @@ _zerg_process_option() {
             let val="$val + 1"
             _zerg_store_value $var_style $result_dict $dest "$val"
             return 0 ;;
-        toggle)  # Special for --foo / --no-foo pairs
+        switches)  # Special for --foo / --no-foo pairs
             local val
             if [[ "$var_style" == "assoc" ]]; then
                 val=$(aa_get -q $result_dict "$dest")
@@ -381,7 +381,7 @@ _zerg_process_flag_option() {
     [[ -z "$action" ]] && action="store"
     warn "FLAG option $opt_name, action $action."
     case "$action" in
-        store_true|store_false|store_const|count|toggle)
+        store_true|store_false|store_const|count|switches)
             local dummy_array dummy_index
             _zerg_process_option "$parser_name" "$def_name" "$opt_name" dummy_array dummy_index
             return $? ;;
@@ -433,7 +433,7 @@ EOF
     local ignore_case=$(aa_get -q -d "1" "$parser_name" "ignore_case")
     local icc=$(aa_get -q -d "1" "$parser_name" "ignore_case_choices")
     local var_style=$(aa_get -q -d "separate" "$parser_name" "var_style")
-    local result_dict=`get_argdef_name $parser_name "results"`
+    local result_dict=`join_argdef_name $parser_name "results"`
 
     # Initialize result storage
     #warn "*** par $parser_name, res $result_dict."
@@ -482,7 +482,7 @@ EOF
     #warn "====Parsing '$cmdline_args' ($#cmdline_args items)."
     while [[ $i -le $#cmdline_args ]]; do
         local arg="$cmdline_args[i]"
-        #warn "====Parsing cmdline option #$i: '$arg'"
+        warn "====Parsing cmdline option #$i: '$arg'"
         case "$arg" in
             --help|-h)
                 _zerg_help $parser_name

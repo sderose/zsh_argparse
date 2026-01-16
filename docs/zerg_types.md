@@ -10,64 +10,70 @@ All this is set up via [zerg_types.sh] (which is one of the things called
 by the more general [zerg_setup.sh]).
 
 zerg's types serve the same purpose as values for the `type` argument of
-Python's `argparse.add_argument`. They mean that a given string
-*can be interpreted as* the given type.
-So in argument parsing (whether in zsh or Python), saying `type=int` means the command line items must be a string that amounts to a decimal
-integer, such as "64". zerg provides `--type int` with that same meaning.
+Python's `argparse.add_argument`. In both cases they mean that a given string
+*can be interpreted as* the given type, and saying an argument is type `int`
+means the command line item must be a string that amounts to a decimal integer,
+such as "64".
 
-Zerg adds types
-such as `hexint` for a base-16 expression such as "0xA0". argparse could have
-done this by using `int(arg, 0)` instead of just `int(arg)` internally,
-but it doesn't (as of this writing). I consider
+But Python argparse *also* converts the string to its internal type. zerg does not.
+In zerg, the string is checked but still returned unchanged (unless
+`--fold` was specified, or it was an abbreviated `choices` value, etc.).
+This is because most types have no zsh built-in equivalent;
+even int and float (which do) lose their type when expanded or passed;
+and you can't easily create new zsh types.
+So if you declare a zerg argument to be of type `hexint`, then `0xF00D'
+is returned as "0xF00D", not as "61453".
+
+Zerg provides types
+such as `hexint` for a base-16 expression such as "0xA0". I consider
 it common enough to just provide off-the-shelf (batteries, y'know).
 There are also `octint` for base-8 values like "0o100",
 `binint` like "0b10110111", and `anyint` for allowing any of the 4 bases.
+argparse does not provide an equivalent, but
+see below re. [lib/utils/zerg_types.py].
 
-There are convenience types for dates, times,
+There are also convenience types for dates, times,
 urls, pids, and some important mathematical types such as `prob`, `logprob`,
 and `complex`. Tensors have rudimentary support, represented as space
-separated sequences of floats, "(", and ")".
+separated sequences of floats, "(", and ")", with optional shape checking.
 
 The types are listed in a zsh associative array named `zerg_types`, which is
-created by `zerg_setup.sh`. Each has its name (all lower case) as the key,
+created by [zerg_setup.sh]. Each has its name (all lower case) as the key,
 and the value is a near-equivalent Python type. The Python type is used
 mainly by `zerg_to_argparser()`. `zergtypename` is itself a zerg type.
 
-*Note*: zerg also provides [extras/zerg_types.py], with Python code that
-defines a function for each zerg type, that can be passed to Python's
+*Note*: zerg also provides [lib/utils/zerg_types.py], which
+defines a function for each zerg type that can be passed to Python's
 argparse.add_argument's `type` parameter. These functions recognize the
-appropriate strings, test semantics if applicable, cast if needed,
-and return the value as argparse
-does for other types. For example, after importing `zerg_types`, you can
-use zerg types like this:
+appropriate strings, test semantics if applicable, cast if needed (as
+normal for Python argparse), and return the result. For example,
+after importing `zerg_types` you can use zerg types like this:
 
 ```
     myparser.add_argument("--value", type=hexint, help=...)
 ```
 
 The zerg 'path' type accepts a variety of options, such as to distinguish
-files from directories, writable files, etc. These can be use like this, setting
-flag options to True as needed:
+files from directories, writable files, etc. These can generally be used
+like this, setting flag options to True as needed:
 
 ```
     myparser.add_argument("--value", type=partial(path, w=True, new=True)...)
 ```
 
-Other zerg types that take options may not allow this (yet).
 
-
-==Type-related functions==
+==Other functions==
 
 Each type has a tester named `is_` plus the (lower case) type name, such as
-`is_int`. These return code 0 (success) if the string passed fits the type. If
+`is_int`. These succeed (return code 0) if the string passed fits the type. If
 the string does not match the type, return code 1 is returned and a
-message is printed (unless the function was given the `-q` option (for quiet).
-A few of the `is_xxx` functions offer options, such as `is_pid` checking whether
+message is printed (unless the function was given `-q` or `--quiet`).
+A few of the `is_` functions offer options, such as `is_pid` checking whether
 a process not only exists but is signalable, or `is_path` checking existence.
 
 Other functions provided by `zerg_types.sh`:
 
-* `is_of_type [name] [string]` -- this is just another way to run the `is_xxx`
+* `is_of_type [name] [string]` -- this is just another way to run the `is_`
 function for a given zerg type name.
 
 * `zerg_ord [char]` returns the numeric code point for the character
@@ -93,7 +99,7 @@ function for a given zerg type name.
 * `unsigned` -- a decimal integer with no sign prefix.
 
 * `pid` -- an active process ID. The `is_pid` test can also take
-a `-a`- or `--active` option, to accept only active (signalable) processes.
+a `-a` (or `--active`) option, to accept only active (signalable) processes.
 
 The letters indicating base (b, o, and x) are recognized regardless of case.
 
@@ -101,14 +107,17 @@ The letters indicating base (b, o, and x) are recognized regardless of case.
 ===Boolean type===
 
 * `bool` -- This type is not commonly used, because True/False options are
-often implemented via `action="store_true"` and/or `action="store_false"`
-(or in zerg, `action=toggle` which creates both in one step).
-However, if you specify `--type bool`, a few conventional values are
-recognized. zsh's conventional "False" value is the empty string (""), and
-that counts as false (as it does if you specify `type=bool` for Python argparse).
-For Python argparse, it seems that anything else counts as True.
-For zerg `is_bool`, however, only 1 (including 01, etc) and "" are accepted,
-unless `--loose` is set, in which case also:
+often implemented via `--action "store_true"` and/or `--action "store_false"`
+(or `action=switches` which in zerg creates both in one step).
+If you do specify `--type bool`, a few conventional values are
+recognized. zsh's conventional ""
+counts as false (as it does if you specify `type=bool` for Python argparse).
+For Python argparse, it seems that anything else counts as True (even 0,
+presumably because argparse sees string "0", not int 0).
+In zsh likewise, any non-empty strings counts as true. That, of course, would
+mean `is_bool` could never return false. Instead, zerg `is_bool` accepts
+only "1" (though leading zeroes are allowed) and "".
+If `--loose` is set, it accepts a slightly large set:
    For True: 1 true yes on y
    For False: 0 false no off n ""
 
@@ -133,19 +142,18 @@ Uniform cardinalities are only checked if the `is_tensor` `--shape` option
 is specified. For example, without `--shape` these all pass,
 but with `---shape "4 4"` the first one fails:
 
-    ( (1 2 3 4) (5) (6 7) )
-    ( ( 1E-10 2 3 4) ( 5 6 7 -8 ) (9 10 11 12) (13 14 15 +16.0) )
-    ( ( 0.110001 0.1234567891011 0.235711131719 0.412454033 )
+    "( (1 2 3 4) (5) (6 7) )"
+    "( ( 1E-10 2 3 4) ( 5 6 7 -8 ) (9 10 11 12) (13 14 15 +16.0) )"
+    "( ( 0.110001 0.1234567891011 0.235711131719 0.412454033 )
       ( 0.57721 0.6180338 0.91596 1.839 )
       ( 1.3247 1.20205 1.6180338 2.502 )
-      ( 2.685 2.71828 3.14159 4.669 6.28318) )
+      ( 2.685 2.71828 3.14159 4.669 6.28318) )"
 
 The outer parentheses may not be omitted. For example, "(1 2) (3 4)" does
 not satisfy `--shape "2 2"`.
 
-If specified, `--shape` must have a value
-consisting of one or more space separated
-items, each of which must be a positive integer, or "*" to indicate any
+If specified, `--shape` must have a value consisting of one or more space
+separated items, each of which must be a positive integer, or "*" to indicate any
 size is acceptable for that dimension.
 
 There is presently no provision for non-float tensor items (except the
@@ -194,14 +202,15 @@ Either a hyphen plus one letter; or two hyphens, a letter,
 and perhaps continuing with more letters, digits, and/or underscores.
 It also accepts `+` plus one letter.
 It does not currently accept bundled single-character options (neither
-does `zerg_parse` at this time). Note: Unlike most `is_xxx` functions,
-`is_argname` does not accept `-q`, because it would collide with typical
-arguments.
+does `zerg_parse` at this time). Note: Like other `is_xxx` functions,
+`is_argname` does accept a `-q` option to avoid a message on failure.
+But one might very well want to test the string "-q". Because of this,
+using "--" before the argument to be tested is good practice.
 
-Both in Python argparse and in zerg, such names are converted for
+Both in Python argparse and in zerg, argument names are converted for
 use as destination variable names by dropping the leading hyphen(s)
 and changing internal hyphens to underscores. `zerg_opt_to_var` does this.
-In zerg, actual argument definitions are stored in assocs named by
+Similarly, argument definitions are stored in assocs named by
 the parser that created them, 2 underscores, and the argument's reference name
 as transformed via `zerg_opt_to_var`. See also `zerg_var_to_opt`,
 `zerg_new`, and `zerg_add` for more details.
@@ -215,12 +224,14 @@ This does not presently return 0 (success) for shell reserved words.
 However, those case be tested with `is_reserved`.
 
 * `reserved` -- the name of a shell reserved word. These are available
-in array `$reswords`.
+in zsh's built-in array `$reswords`.
 
 * `varname` -- the name of a currently-available shell variable.
 If a second argument is given it should be the name of a zsh variable type,
 and the variable will be tested for whether it's of that type
 (namely undef, scalar, integer, float, array, or assoc -- see `zsh_type`).
+To test for a legal zsh variable name but not necessarily
+one that exists, see `ident`.
 
 * `zergtypename` -- the name of a zerg-defined datatype. See `$zerg_types`
 and [zerg_types.md].
@@ -229,8 +240,9 @@ and [zerg_types.md].
 a string *that matches* a particular expression.
 
 * `path` -- a file, directory, or similar path in the
-file system. Checking is fairly loose. There are not
-named sub-types to distinguish paths that would match
+file system. Checking rejects
+['"`( ){}\[\]+=:;?<>,|\\!@%^&*] unless you set `--loose`.
+There are not named sub-types to distinguish paths that would match
 zsh file-tests such as `-d -e -f -r -w -x -N`. However, the `is_path` function
 does have these and a few other tests as options.
 
@@ -239,7 +251,7 @@ does have these and a few other tests as options.
 * `lang` -- a language code. Currently this accepts either the form defined
 by ISO 639 and several RFCs (used in HTML, XML, and other places),
 such as "en-us" or the form seen in locale's `LANG`, such as "en_US.UTF-8".
-Specific country, language, and character set names are not checked.
+Specific country, language, and writing-system names are not checked.
 
 * `encoding` -- a character encoding scheme. This is checked via `iconv -l`,
 which has a wide selection of names. All the names there consist of
@@ -247,19 +259,19 @@ uppercase ASCII letters, ASCII digits, hyphen, underscore, and occasional
 [:.()+].
 
 * `locale` -- a name of a locale, installed as a sub-directory of
-`/usr/share/locale/` as typical for *nix systems. If `/usr/share/locale/`
+[/usr/share/locale/] as typical for *nix systems. If [/usr/share/locale/]
 is not found, anything is accepted (for now).
 
 * `format` -- a single %-initial format code as understood by zsh `printf`.
-There's a lot to these, and they're not quite the same as in C or Python.
+There are a lot to these, and they're not quite the same as in C or Python.
 
 
 ===Enumerations===
 
-There is no enum type in zerg. Enumerations are just handled as strings,
-(more specifically, identifiers).
+There is no enum type in zerg. Enumerations are just handled as lists
+of strings (more specifically, `ident`s).
 Particular argument definitions use `--choices` to constrain the value
-to any of several `ident`s. There are `parser_new` options to ignore case
+to any of several `ident` values. There are `parser_new` options to ignore case
 and/or to recognize abbreviations for choices. Enums can also
 be simulated using regexes and the `--pattern` option of `zerg_add`.
 
@@ -276,13 +288,12 @@ sign followed by hh:mm.
     12:01:59
     12:01:59Z
     23:59:59-05:00
+    00:00:00.001Z
 ```
 
 * `date` -- a date in ISO 8601 form: yyyy-mm-dd.
 The usual truncations are supported, such as "2025-09".
-The range checks are a bit too loose, and only check ISO form, not
-any locale-specific form(s). They are presently done
-by a regex (also defined in [zerg_types.sh, near the top).
+There is no support for locale-specific form(s).
 
 * `datetime` -- a date and time in ISO 8601 form (joined by a "T"), such as
 `2025-10-19T00:00:00.000-5:00`.
